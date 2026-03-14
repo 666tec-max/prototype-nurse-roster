@@ -12,16 +12,36 @@ export default function RosterPage() {
 
   const [filterDept, setFilterDept] = useState('');
   const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7 || 7));
-    return d.toISOString().split('T')[0];
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
   });
 
   const [endDate, setEndDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7 || 7) + 6);
-    return d.toISOString().split('T')[0];
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
+    d.setDate(d.getDate() + 13);
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
   });
+
+  const handleShortcut = (type) => {
+    const currentStartStr = startDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+    const sd = new Date(currentStartStr);
+    
+    if (type === '2weeks') {
+      const ed = new Date(currentStartStr);
+      ed.setDate(ed.getDate() + 13);
+      setStartDate(currentStartStr);
+      setEndDate(ed.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+    } else if (type === '1month') {
+      const nextMonth = new Date(sd.getFullYear(), sd.getMonth() + 1, 1);
+      const lastDayNextMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0);
+      setStartDate(nextMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+      setEndDate(lastDayNextMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+    } else if (type === '2months') {
+      const nextNextMonth = new Date(sd.getFullYear(), sd.getMonth() + 2, 1);
+      const lastDayNextNextMonth = new Date(nextNextMonth.getFullYear(), nextNextMonth.getMonth() + 1, 0);
+      setStartDate(nextNextMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+      setEndDate(lastDayNextNextMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+    }
+  };
 
   const [rosterData, setRosterData] = useState([]);
   const [metadata, setMetadata] = useState(null);
@@ -269,6 +289,36 @@ export default function RosterPage() {
               <Download size={18} /> Export Excel
             </button>
           )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header">
+          <h3>Parameters</h3>
+        </div>
+        <div className="form-row" style={{ padding: '0 20px 20px 20px', alignItems: 'flex-start' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Start Date</label>
+            <input type="date" className="form-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            <label className="form-label">Department</label>
+            <select className="form-input" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+              {departments.map(d => <option key={d.department_id} value={d.department_id}>{d.department_id} - {d.description || 'Dept'}</option>)}
+              {departments.length === 0 && <option value="" disabled>No departments configured</option>}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">End Date</label>
+            <input type="date" className="form-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
+        </div>
+        <div style={{ padding: '0 20px 20px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-sm btn-ghost" onClick={() => handleShortcut('2weeks')}>Next 2 weeks</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => handleShortcut('1month')}>Next month</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => handleShortcut('2months')}>Next next month</button>
+          </div>
           <button
             className="btn btn-primary"
             onClick={generateRoster}
@@ -277,29 +327,6 @@ export default function RosterPage() {
             {generating ? <Loader2 className="spin" size={18} /> : <Wand2 size={18} />}
             {generating ? 'Engine Running...' : 'Generate Auto Roster'}
           </button>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header">
-          <h3>Parameters</h3>
-        </div>
-        <div className="form-row" style={{ padding: '0 20px 20px 20px' }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label className="form-label">Department</label>
-            <select className="form-input" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
-              {departments.map(d => <option key={d.department_id} value={d.department_id}>{d.department_id} - {d.description || 'Dept'}</option>)}
-              {departments.length === 0 && <option value="" disabled>No departments configured</option>}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Start Date</label>
-            <input type="date" className="form-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">End Date</label>
-            <input type="date" className="form-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
-          </div>
         </div>
       </div>
 

@@ -90,22 +90,32 @@ export default function SkillsPage() {
           <p>Define clinical skills like ACLS, PALS, ICU, etc.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-          {filtered.map(item => (
-            <div key={item.id} className="card" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div className="color-swatch" style={{ backgroundColor: item.colour, cursor: 'default', width: 36, height: 36, borderRadius: 'var(--radius-md)' }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.skill_id}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.description || 'No description'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(item)}><Pencil size={14} /></button>
-                <button className="btn btn-danger btn-icon btn-sm" onClick={() => remove(item)}><Trash2 size={14} /></button>
-              </div>
-            </div>
-          ))}
+        <div className="data-table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Colour</th>
+                <th>Skill ID</th>
+                <th>Description</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(item => (
+                <tr key={item.id}>
+                  <td><div className="color-swatch" style={{ backgroundColor: item.colour, cursor: 'default' }} /></td>
+                  <td style={{ fontWeight: 600 }}>{item.skill_id}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{item.description || '—'}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => remove(item)}><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -117,7 +127,7 @@ export default function SkillsPage() {
       >
         <div className="form-group">
           <label className="form-label">Skill ID</label>
-          <input className="form-input" value={form.skill_id} onChange={e => setForm({ ...form, skill_id: e.target.value })} placeholder="e.g. ACLS" disabled={!!editing} />
+          <input className="form-input" value={form.skill_id} onChange={e => setForm({ ...form, skill_id: e.target.value })} placeholder="e.g. ACLS" />
         </div>
         <div className="form-group">
           <label className="form-label">Description</label>

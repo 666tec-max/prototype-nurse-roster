@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabase, logAudit } from '../lib/supabase';
 import Modal from '../components/Modal';
-import { Plus, Trash2, CalendarClock, Search, Clock, Info } from 'lucide-react';
+import { Plus, Trash2, CalendarClock, Search, Clock, Info, ArrowUpDown } from 'lucide-react';
 
 export default function ShiftRequestsPage() {
   const { user } = useAuth();
@@ -18,6 +18,17 @@ export default function ShiftRequestsPage() {
 
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sortField, setSortField] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -89,7 +100,19 @@ export default function ShiftRequestsPage() {
     getStaffName(i.staff_id).toLowerCase().includes(search.toLowerCase()) ||
     i.date.includes(search) ||
     i.shift_id.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => {
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+    if (sortField === 'name') {
+      aVal = getStaffName(a.staff_id);
+      bVal = getStaffName(b.staff_id);
+    }
+    if (!aVal) aVal = '';
+    if (!bVal) bVal = '';
+    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   return (
     <div>
@@ -135,9 +158,15 @@ export default function ShiftRequestsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Staff</th>
-                <th>Date</th>
-                <th>Requested Shift</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
+                  Staff {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('date')}>
+                  Date {sortField === 'date' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('shift_id')}>
+                  Requested Shift {sortField === 'shift_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>

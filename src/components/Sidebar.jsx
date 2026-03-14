@@ -20,7 +20,7 @@ const NAV_ITEMS = [
 
   { type: 'section', label: 'Requests' },
   { path: '/shift-requests', icon: CalendarClock, label: 'Shift Requests' },
-  { path: '/leaves', icon: CalendarHeart, label: 'Time Off' },
+  { path: '/leaves', icon: CalendarHeart, label: 'Leave Requests' },
 
   { type: 'section', label: 'Scheduling' },
   { path: '/demand', icon: ClipboardList, label: 'Demand Config' },

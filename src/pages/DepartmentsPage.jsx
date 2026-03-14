@@ -127,7 +127,7 @@ export default function DepartmentsPage() {
       >
         <div className="form-group">
           <label className="form-label">Department ID</label>
-          <input className="form-input" value={form.department_id} onChange={e => setForm({ ...form, department_id: e.target.value })} placeholder="e.g. ED" disabled={!!editing} />
+          <input className="form-input" value={form.department_id} onChange={e => setForm({ ...form, department_id: e.target.value })} placeholder="e.g. ED" />
         </div>
         <div className="form-group">
           <label className="form-label">Description</label>

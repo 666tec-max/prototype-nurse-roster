@@ -189,7 +189,7 @@ export default function GradesPage() {
       >
         <div className="form-group">
           <label className="form-label">Grade ID</label>
-          <input className="form-input" value={form.grade_id} onChange={e => setForm({ ...form, grade_id: e.target.value })} placeholder="e.g. NM" disabled={!!editing} />
+          <input className="form-input" value={form.grade_id} onChange={e => setForm({ ...form, grade_id: e.target.value })} placeholder="e.g. NM" />
         </div>
         <div className="form-group">
           <label className="form-label">Description</label>

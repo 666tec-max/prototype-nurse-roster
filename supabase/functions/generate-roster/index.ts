@@ -27,87 +27,120 @@ serve(async (req) => {
     )
 
     // 1. Fetch all necessary data
-    const [staffRes, demandRes, leavesRes, shiftsRes, skillsRes] = await Promise.all([
+    const sevenDaysAgo = new Date(new Date(start_date).getTime() - 7 * 24 * 3600 * 1000).toISOString().split('T')[0];
+    const [staffRes, demandRes, leavesRes, shiftsRes, skillsRes, gradesRes, fixedRes, pastRosterRes] = await Promise.all([
       supabaseClient.from('staff').select('*'),
       supabaseClient.from('demand').select('*').eq('department_id', department_id).gte('date_start', start_date).lte('date_start', end_date),
       supabaseClient.from('leave_requests').select('*').eq('status', 'Approved'),
       supabaseClient.from('shifts').select('*'),
-      supabaseClient.from('staff_skills').select('*')
+      supabaseClient.from('staff_skills').select('*'),
+      supabaseClient.from('grades').select('*'),
+      supabaseClient.from('fixed_assignments').select('*').gte('date', start_date).lte('date', end_date),
+      supabaseClient.from('roster').select('*').gte('date', sevenDaysAgo).lte('date', start_date)
     ])
 
-    if (staffRes.error) {
-      console.error('Staff fetch error:', staffRes.error);
-      throw staffRes.error;
-    }
-    if (demandRes.error) {
-      console.error('Demand fetch error:', demandRes.error);
-      throw demandRes.error;
-    }
-    if (leavesRes.error) {
-      console.error('Leaves fetch error:', leavesRes.error);
-      throw leavesRes.error;
-    }
-    if (shiftsRes.error) {
-      console.error('Shifts fetch error:', shiftsRes.error);
-      throw shiftsRes.error;
-    }
-    if (skillsRes.error) {
-      console.error('Skills fetch error:', skillsRes.error);
-      throw skillsRes.error;
-    }
+    if (staffRes.error) throw staffRes.error;
+    if (demandRes.error) throw demandRes.error;
+    if (leavesRes.error) throw leavesRes.error;
+    if (shiftsRes.error) throw shiftsRes.error;
+    if (skillsRes.error) throw skillsRes.error;
+    if (gradesRes.error) throw gradesRes.error;
+    if (fixedRes.error) throw fixedRes.error;
 
     const allStaffRaw = staffRes.data || []
     const allDemand = demandRes.data || []
     const allLeaves = leavesRes.data || []
     const allShifts = shiftsRes.data || []
     const allStaffSkills = skillsRes.data || []
+    const allGrades = gradesRes.data || []
+    const allFixed = fixedRes.data || []
+    const pastRoster = pastRosterRes.data || []
 
-    // Attach skills to staff
-    const allStaff = allStaffRaw.map(staff => ({
-      ...staff,
-      staff_skills: allStaffSkills.filter(ss => ss.staff_id === staff.staff_id)
-    }))
-
+    const gradesMap = new Map(allGrades.map(g => [g.grade_id, g.hierarchy_level]))
     const shiftsMap = new Map(allShifts.map(s => [s.shift_id, s]))
 
+    // Attach skills and grade hierarchy to staff
+    const allStaff = allStaffRaw
+      .filter(staff => !staff.department_id || staff.department_id === department_id)
+      .map(staff => ({
+        ...staff,
+        staff_skills: allStaffSkills.filter(ss => ss.staff_id === staff.staff_id).map(ss => ss.skill_id),
+        hierarchy_level: gradesMap.get(staff.grade_id) || 99
+      }))
+
     const assignments = []
-    
-    // Create a generated roster group ID
     const rosterGroupId = crypto.randomUUID()
     
-    // Very basic heuristic greedy algorithm
-    // Iterate through each day in the date range
     let current = new Date(start_date)
     const end = new Date(end_date)
     
     while (current <= end) {
       const dateStr = current.toISOString().split('T')[0]
-      
-      // Get demand for this date
+      const prevDate = new Date(current)
+      prevDate.setDate(prevDate.getDate() - 1)
+      const prevDateStr = prevDate.toISOString().split('T')[0]
+
       const dailyDemand = allDemand.filter(d => d.date_start <= dateStr && (d.date_end >= dateStr || !d.date_end))
       
+      const fixedForDay = allFixed.filter(f => f.date === dateStr)
+
+      // Apply fixed assignments first
+      for (const fixed of fixedForDay) {
+        assignments.push({
+          user_id: user_id,
+          staff_id: fixed.staff_id,
+          date: dateStr,
+          shift_id: fixed.shift_id,
+          roster_group_id: rosterGroupId
+        })
+      }
+
       for (const demand of dailyDemand) {
         const shift = shiftsMap.get(demand.shift_id)
         if (!shift) continue
         
-        let assignedCount = 0
-        
-        // Find staff to fulfill this demand
+        const demandGradeHierarchy = gradesMap.get(demand.required_grade) || 99
+        let assignedCount = assignments.filter(a => a.date === dateStr && a.shift_id === demand.shift_id).length
+
         for (const staff of allStaff) {
           if (assignedCount >= demand.minimum_staff) break
-          
-          // Check if staff belongs to department (Keep this, but I've already updated staff in DB)
-          if (staff.department_id && staff.department_id !== department_id) continue
 
-          // Check if staff is on leave
+          // Grade Eligibility (cannot fill roles requiring higher grade, meaning lower hierarchy number)
+          if (staff.hierarchy_level > demandGradeHierarchy) continue
+          
+          // Skill Eligibility
+          if (demand.required_skill && !staff.staff_skills.includes(demand.required_skill)) continue
+
+          // Leave protection
           const isOnLeave = allLeaves.some(l => l.staff_id === staff.staff_id && l.start_date <= dateStr && l.end_date >= dateStr)
           if (isOnLeave) continue
           
-          // Check if staff already assigned to a shift on this day
+          // Max shifts check
+          const weekStart = new Date(current)
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay()) // Sunday
+          const weekEnd = new Date(weekStart)
+          weekEnd.setDate(weekEnd.getDate() + 6)
+          const weekShiftsCount = assignments.filter(a => a.staff_id === staff.staff_id && a.date >= weekStart.toISOString().split('T')[0] && a.date <= weekEnd.toISOString().split('T')[0]).length
+               + pastRoster.filter(a => a.staff_id === staff.staff_id && a.date >= weekStart.toISOString().split('T')[0] && a.date <= weekEnd.toISOString().split('T')[0]).length
+          if (weekShiftsCount >= (staff.max_shifts_per_week || 6)) continue
+
+          // Already assigned on this day
           const alreadyAssigned = assignments.some(a => a.staff_id === staff.staff_id && a.date === dateStr)
           if (alreadyAssigned) continue
+
+          // Night Shift Recovery: check if staff worked a night shift yesterday
+          // A night shift often has end time < start time (e.g. 20:00 to 08:00)
+          const workedYesterday = assignments.find(a => a.staff_id === staff.staff_id && a.date === prevDateStr) 
+            || pastRoster.find(a => a.staff_id === staff.staff_id && a.date === prevDateStr)
           
-          // Add assignment
+          if (workedYesterday) {
+            const yesterdayShift = shiftsMap.get(workedYesterday.shift_id) as any
+            if (yesterdayShift && yesterdayShift.end_time < yesterdayShift.start_time) {
+              // Worked night shift yesterday, must rest today
+              continue
+            }
+          }
+          
           assignments.push({
             user_id: user_id,
             staff_id: staff.staff_id,
@@ -119,11 +152,9 @@ serve(async (req) => {
           assignedCount++
         }
       }
-      
       current.setDate(current.getDate() + 1)
     }
 
-    // Insert metadata and assignments in a transaction
     const { error: metaError } = await supabaseClient.from('roster_metadata').insert({
       id: rosterGroupId,
       user_id: user_id,
@@ -143,7 +174,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true, count: assignments.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Top level caught error:', error.message || error);
     return new Response(JSON.stringify({ error: error.message || 'Unknown error' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

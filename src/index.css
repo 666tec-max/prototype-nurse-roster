@@ -96,39 +96,39 @@
   --scrollbar-thumb: #c5c9d6;
 }
 
-/* ===== EYE COMFORT THEME (Green) ===== */
+/* ===== EYE COMFORT THEME (Warm) ===== */
 .theme-comfort {
-  --bg-primary: #F3FAF7;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #E8F5EF;
-  --bg-card: #ffffff;
-  --bg-card-hover: #EEF8F3;
-  --bg-input: #EDF5F1;
-  --bg-modal-overlay: rgba(0, 0, 0, 0.3);
-  --bg-glass: rgba(255, 255, 255, 0.9);
-  --border-primary: rgba(107, 175, 146, 0.12);
-  --border-secondary: rgba(107, 175, 146, 0.2);
-  --border-active: rgba(107, 175, 146, 0.5);
-  --text-primary: #333333;
-  --text-secondary: #5a6b62;
-  --text-tertiary: #8a9c93;
-  --text-inverse: #ffffff;
-  --accent-primary: #6BAF92;
-  --accent-primary-hover: #5A9E82;
-  --accent-primary-subtle: rgba(107, 175, 146, 0.1);
-  --accent-success: #4CAF50;
-  --accent-success-subtle: rgba(76, 175, 80, 0.1);
-  --accent-warning: #E2A72E;
-  --accent-warning-subtle: rgba(226, 167, 46, 0.1);
-  --accent-danger: #D45B5B;
-  --accent-danger-subtle: rgba(212, 91, 91, 0.1);
-  --accent-info: #5B9BD5;
-  --accent-info-subtle: rgba(91, 155, 213, 0.1);
-  --sidebar-bg: #EAF5EF;
-  --sidebar-hover: rgba(107, 175, 146, 0.08);
-  --sidebar-active: rgba(107, 175, 146, 0.15);
-  --scrollbar-track: #E8F5EF;
-  --scrollbar-thumb: #B0D4C3;
+  --bg-primary: #E6DFAF;
+  --bg-secondary: #F9F6ED;
+  --bg-tertiary: #D8D1A0;
+  --bg-card: #F9F6ED;
+  --bg-card-hover: #FFFFFF;
+  --bg-input: #F0EAD6;
+  --bg-modal-overlay: rgba(60, 50, 30, 0.4);
+  --bg-glass: rgba(249, 246, 237, 0.9);
+  --border-primary: rgba(162, 140, 84, 0.2);
+  --border-secondary: rgba(162, 140, 84, 0.3);
+  --border-active: rgba(162, 140, 84, 0.6);
+  --text-primary: #4A3C22;
+  --text-secondary: #705F3F;
+  --text-tertiary: #968360;
+  --text-inverse: #FFFFFF;
+  --accent-primary: #A28C54;
+  --accent-primary-hover: #8B7743;
+  --accent-primary-subtle: rgba(162, 140, 84, 0.15);
+  --accent-success: #4A8C50;
+  --accent-success-subtle: rgba(74, 140, 80, 0.15);
+  --accent-warning: #D28C2E;
+  --accent-warning-subtle: rgba(210, 140, 46, 0.15);
+  --accent-danger: #C45B5B;
+  --accent-danger-subtle: rgba(196, 91, 91, 0.15);
+  --accent-info: #5B8BD5;
+  --accent-info-subtle: rgba(91, 139, 213, 0.15);
+  --sidebar-bg: #EAE3BA;
+  --sidebar-hover: rgba(162, 140, 84, 0.1);
+  --sidebar-active: rgba(162, 140, 84, 0.2);
+  --scrollbar-track: #DFD7AA;
+  --scrollbar-thumb: #BCAE7D;
 }
 
 /* ===== BASE STYLES ===== */

@@ -36,7 +36,7 @@ export default function ShiftsPage() {
   const load = useCallback(async () => {
     if (!user) return;
     const supabase = getSupabase(user.userId);
-    const { data } = await supabase.from('shifts').select('*').order('shift_id');
+    const { data } = await supabase.from('shifts').select('*').order('start_time');
     setItems(data || []);
     setLoading(false);
   }, [user]);
@@ -162,7 +162,7 @@ export default function ShiftsPage() {
       >
         <div className="form-group">
           <label className="form-label">Shift ID</label>
-          <input className="form-input" value={form.shift_id} onChange={e => setForm({ ...form, shift_id: e.target.value })} placeholder="e.g. N" disabled={!!editing} />
+          <input className="form-input" value={form.shift_id} onChange={e => setForm({ ...form, shift_id: e.target.value })} placeholder="e.g. N" />
         </div>
         <div className="form-group">
           <label className="form-label">Description</label>

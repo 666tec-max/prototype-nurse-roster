@@ -38,7 +38,7 @@ const CONSTRAINTS = [
   },
   {
     name: 'Night Shift Recovery',
-    description: 'Mandatory rest days must follow consecutive night shifts',
+    description: '1 night → 1 off | 2-3 nights → 2 off | 4 nights → 3 off | Max 4 consecutive nights',
     icon: '🌙',
   },
   {

@@ -128,16 +128,16 @@ export default function FairnessPage() {
           <h3>Parameters</h3>
         </div>
         <div className="form-row" style={{ padding: '0 20px 20px 20px' }}>
+          <div className="form-group">
+            <label className="form-label">Start Date</label>
+            <input type="date" className="form-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
           <div className="form-group" style={{ flex: 1 }}>
             <label className="form-label">Department</label>
             <select className="form-input" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
               {departments.map(d => <option key={d.department_id} value={d.department_id}>{d.department_id} - {d.description || 'Dept'}</option>)}
               {departments.length === 0 && <option value="" disabled>No departments configured</option>}
             </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Start Date</label>
-            <input type="date" className="form-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">End Date</label>

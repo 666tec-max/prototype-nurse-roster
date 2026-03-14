@@ -125,7 +125,14 @@ export default function SoftConstraintsPage() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {SOFT_CONSTRAINTS.map(sc => {
+        {[...SOFT_CONSTRAINTS]
+          .sort((a, b) => {
+            const valA = priorities[a.key] || 5;
+            const valB = priorities[b.key] || 5;
+            if (valA !== valB) return valB - valA;
+            return a.name.localeCompare(b.name);
+          })
+          .map(sc => {
           const val = priorities[sc.key] || 5;
           return (
             <div key={sc.key} className="card" style={{ padding: '20px 24px' }}>

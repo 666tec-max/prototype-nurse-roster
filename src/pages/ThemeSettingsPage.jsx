@@ -20,7 +20,7 @@ const THEME_META = {
     icon: Eye,
     label: 'Eye Comfort',
     desc: 'Warm tones to reduce eye strain',
-    preview: 'linear-gradient(135deg, #1c1a16, #2a2620)',
+    preview: 'linear-gradient(135deg, #E6DFAF, #F9F6ED)',
   },
 };
 

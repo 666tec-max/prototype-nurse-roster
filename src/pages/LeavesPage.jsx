@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabase, logAudit } from '../lib/supabase';
 import Modal from '../components/Modal';
-import { Plus, Trash2, CalendarHeart, Search, Clock } from 'lucide-react';
+import { Plus, Trash2, CalendarHeart, Search, Clock, Info, ArrowUpDown } from 'lucide-react';
 
 export default function LeavesPage() {
   const { user } = useAuth();
@@ -19,6 +19,17 @@ export default function LeavesPage() {
   
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sortField, setSortField] = useState('start_date');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -110,22 +121,50 @@ export default function LeavesPage() {
   const filtered = items.filter(i =>
     i.staff_id.toLowerCase().includes(search.toLowerCase()) ||
     getStaffName(i.staff_id).toLowerCase().includes(search.toLowerCase()) ||
-    i.start_date.includes(search)
-  );
+    i.start_date.includes(search) ||
+    (i.leave_type || '').toLowerCase().includes(search.toLowerCase())
+  ).sort((a, b) => {
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+    if (sortField === 'name') {
+      aVal = getStaffName(a.staff_id);
+      bVal = getStaffName(b.staff_id);
+    }
+    if (!aVal) aVal = '';
+    if (!bVal) bVal = '';
+    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   return (
     <div>
       <div className="page-header">
-        <h1>Time Off Requests</h1>
+        <h1>Leave Requests</h1>
         <p>Manage approved leave and unavailable days</p>
+      </div>
+
+      <div style={{
+        padding: '12px 16px',
+        background: 'var(--accent-info-subtle)',
+        borderRadius: 'var(--radius-md)',
+        fontSize: '0.85rem',
+        color: 'var(--accent-info)',
+        marginBottom: 20,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}>
+        <Info size={18} style={{ flexShrink: 0 }} />
+        <span><strong>Hard Constraint:</strong> All leave requests are automatically approved. The solver must enforce the leave for the staff member on the specified dates.</span>
       </div>
 
       <div className="page-actions">
         <div className="search-bar" style={{ flex: 1 }}>
           <Search size={16} />
-          <input className="form-input" placeholder="Search by name, ID, or YYYY-MM-DD..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 38 }} />
+          <input className="form-input" placeholder="Search by name, ID, reason, or date..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 38 }} />
         </div>
-        <button className="btn btn-primary" onClick={openAdd}><Plus size={16} /> Add Time Off</button>
+        <button className="btn btn-primary" onClick={openAdd}><Plus size={16} /> Add Leave</button>
       </div>
 
       {loading ? (
@@ -141,9 +180,15 @@ export default function LeavesPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Staff Member</th>
-                <th>Reason</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('start_date')}>
+                  Date {sortField === 'start_date' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
+                  Staff Member {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('leave_type')}>
+                  Reason {sortField === 'leave_type' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>

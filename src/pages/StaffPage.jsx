@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabase, logAudit } from '../lib/supabase';
 import Modal from '../components/Modal';
-import { Plus, Pencil, Trash2, Users, Search, X, Eye } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Search, X, Eye, ArrowUpDown } from 'lucide-react';
 
 const EMPTY = {
   staff_id: '',
@@ -30,6 +30,18 @@ export default function StaffPage() {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
+  
+  const [sortField, setSortField] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -157,7 +169,16 @@ export default function StaffPage() {
     i.name.toLowerCase().includes(search.toLowerCase()) ||
     (i.department_id && i.department_id.toLowerCase().includes(search.toLowerCase())) ||
     (i.grade_id && i.grade_id.toLowerCase().includes(search.toLowerCase()))
-  );
+  ).sort((a, b) => {
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+    
+    if (!aVal) aVal = '';
+    if (!bVal) bVal = '';
+
+    const res = aVal.localeCompare(bVal, undefined, { numeric: true });
+    return sortOrder === 'asc' ? res : -res;
+  });
 
   const getGradeColor = (gradeId) => {
     const grade = grades.find(g => g.grade_id === gradeId);
@@ -203,9 +224,9 @@ export default function StaffPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Staff ID</th>
-                  <th>Name</th>
-                  <th>Department</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('staff_id')}>Staff ID {sortField === 'staff_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>Name {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('department_id')}>Department {sortField === 'department_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
                   <th>Grade</th>
                   <th>Skills</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
