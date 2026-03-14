@@ -127,7 +127,7 @@ export default function LoginPage() {
             Demo Account
           </div>
           <div><strong>User ID:</strong> Demo</div>
-          <div><strong>Password:</strong> apple</div>
+          <div><strong>Password:</strong> Password123</div>
         </div>
       </div>
     </div>
