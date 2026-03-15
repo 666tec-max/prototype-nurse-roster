@@ -196,17 +196,12 @@ export default function RosterPage() {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
       const { data, error } = await supabase.functions.invoke('generate-roster', {
         body: {
           department_id: filterDept,
           start_date: startDate,
           end_date: endDate,
           user_id: user.userId
-        },
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`
         }
       });
 
