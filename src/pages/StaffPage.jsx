@@ -12,8 +12,8 @@ const EMPTY = {
   email: '',
   department_id: '',
   grade: '',
-  max_shifts_per_week: 5,
-  max_consecutive_shifts: 4,
+  max_shifts_per_week: null,
+  max_consecutive_shifts: null,
   skills: []
 };
 
@@ -92,8 +92,8 @@ export default function StaffPage() {
       email: item.email || '',
       department_id: item.department_id || '',
       grade: item.grade_id,
-      max_shifts_per_week: item.max_shifts_per_week || 5,
-      max_consecutive_shifts: item.max_consecutive_shifts || 4,
+      max_shifts_per_week: item.max_shifts_per_week || null,
+      max_consecutive_shifts: item.max_consecutive_shifts || null,
       skills: item.skills || []
     });
     setEditing(item);
@@ -227,7 +227,7 @@ export default function StaffPage() {
                   <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('staff_id')}>Staff ID {sortField === 'staff_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
                   <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>Name {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
                   <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('department_id')}>Department {sortField === 'department_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
-                  <th>Grade</th>
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('grade_id')}>Grade {sortField === 'grade_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}</th>
                   <th>Skills</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -414,16 +414,51 @@ export default function StaffPage() {
         </div>
 
         <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '20px 0' }} />
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem' }}>Labour Constraints</h4>
+        <h4 style={{ margin: '0 0 4px 0', fontSize: '0.95rem' }}>Labour Constraints (Optional)</h4>
+        <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Leave unselected to use system defaults (Max 6 shifts/week, Max 6 consecutive shifts).</p>
 
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Max Shifts / Week (1–6)</label>
-            <input type="number" className="form-input" value={form.max_shifts_per_week} onChange={e => setForm({ ...form, max_shifts_per_week: parseInt(e.target.value) || 1 })} min={1} max={6} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[1, 2, 3, 4, 5, 6].map(num => (
+                <button
+                  key={`ms-${num}`}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, max_shifts_per_week: f.max_shifts_per_week === num ? null : num }))}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '1px solid',
+                    borderColor: form.max_shifts_per_week === num ? 'var(--accent-primary)' : 'var(--border-color)',
+                    background: form.max_shifts_per_week === num ? 'var(--accent-primary)' : 'transparent',
+                    color: form.max_shifts_per_week === num ? '#fff' : 'inherit',
+                    cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500
+                  }}
+                >{num}</button>
+              ))}
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">Max Consecutive Shifts (1–7)</label>
-            <input type="number" className="form-input" value={form.max_consecutive_shifts} onChange={e => setForm({ ...form, max_consecutive_shifts: parseInt(e.target.value) || 1 })} min={1} max={7} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[1, 2, 3, 4, 5, 6, 7].map(num => (
+                <button
+                  key={`mc-${num}`}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, max_consecutive_shifts: f.max_consecutive_shifts === num ? null : num }))}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '1px solid',
+                    borderColor: form.max_consecutive_shifts === num ? 'var(--accent-primary)' : 'var(--border-color)',
+                    background: form.max_consecutive_shifts === num ? 'var(--accent-primary)' : 'transparent',
+                    color: form.max_consecutive_shifts === num ? '#fff' : 'inherit',
+                    cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500
+                  }}
+                >{num}</button>
+              ))}
+            </div>
           </div>
         </div>
       </Modal>

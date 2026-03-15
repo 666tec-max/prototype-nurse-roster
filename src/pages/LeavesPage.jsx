@@ -36,7 +36,7 @@ export default function LeavesPage() {
     const supabase = getSupabase(user.userId);
     
     const [staffRes, leavesRes] = await Promise.all([
-      supabase.from('staff').select('staff_id, name').order('name'),
+      supabase.from('staff').select('staff_id, name, department_id').order('name'),
       supabase.from('leave_requests').select('*').order('start_date', { ascending: false })
     ]);
 
@@ -129,12 +129,18 @@ export default function LeavesPage() {
     if (sortField === 'name') {
       aVal = getStaffName(a.staff_id);
       bVal = getStaffName(b.staff_id);
+    } else if (sortField === 'department_id') {
+      const sA = staff.find(st => st.staff_id === a.staff_id);
+      const sB = staff.find(st => st.staff_id === b.staff_id);
+      aVal = sA ? sA.department_id : '';
+      bVal = sB ? sB.department_id : '';
     }
+    
     if (!aVal) aVal = '';
     if (!bVal) bVal = '';
-    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-    return 0;
+    
+    const res = aVal.localeCompare(bVal, undefined, { numeric: true });
+    return sortOrder === 'asc' ? res : -res;
   });
 
   return (
@@ -180,11 +186,17 @@ export default function LeavesPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('start_date')}>
-                  Date {sortField === 'start_date' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('staff_id')}>
+                  Staff ID {sortField === 'staff_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
                 </th>
                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
-                  Staff Member {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                  Name {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('department_id')}>
+                  Department {sortField === 'department_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('start_date')}>
+                  Date {sortField === 'start_date' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
                 </th>
                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('leave_type')}>
                   Reason {sortField === 'leave_type' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
@@ -196,14 +208,11 @@ export default function LeavesPage() {
             <tbody>
               {filtered.map(item => (
                 <tr key={item.id}>
+                  <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.staff_id}</td>
+                  <td style={{ fontWeight: 500 }}>{getStaffName(item.staff_id)}</td>
+                  <td>{staff.find(st => st.staff_id === item.staff_id)?.department_id || '—'}</td>
                   <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>
                     {item.start_date} {item.start_date !== item.end_date ? `to ${item.end_date}` : ''}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: 500 }}>{getStaffName(item.staff_id)}</span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{item.staff_id}</span>
-                    </div>
                   </td>
                   <td>
                     <span className="badge" style={{ background: 'var(--bg-tertiary)' }}>{item.leave_type || 'UNAVAILABLE'}</span>

@@ -30,12 +30,12 @@ serve(async (req) => {
     const sevenDaysAgo = new Date(new Date(start_date).getTime() - 7 * 24 * 3600 * 1000).toISOString().split('T')[0];
     const [staffRes, demandRes, leavesRes, shiftsRes, skillsRes, gradesRes, fixedRes, pastRosterRes] = await Promise.all([
       supabaseClient.from('staff').select('*'),
-      supabaseClient.from('demand').select('*').eq('department_id', department_id).gte('date_start', start_date).lte('date_start', end_date),
+      supabaseClient.from('demand').select('*').eq('department_id', department_id),
       supabaseClient.from('leave_requests').select('*').eq('status', 'Approved'),
       supabaseClient.from('shifts').select('*'),
       supabaseClient.from('staff_skills').select('*'),
       supabaseClient.from('grades').select('*'),
-      supabaseClient.from('fixed_assignments').select('*').gte('date', start_date).lte('date', end_date),
+      supabaseClient.from('fixed_assignments').select('*'),
       supabaseClient.from('roster').select('*').gte('date', sevenDaysAgo).lte('date', start_date)
     ])
 
@@ -80,9 +80,14 @@ serve(async (req) => {
       prevDate.setDate(prevDate.getDate() - 1)
       const prevDateStr = prevDate.toISOString().split('T')[0]
 
-      const dailyDemand = allDemand.filter(d => d.date_start <= dateStr && (d.date_end >= dateStr || !d.date_end))
+      const dailyDemand = allDemand.filter(d => 
+        (!d.date_start || d.date_start <= dateStr) && 
+        (!d.date_end || d.date_end >= dateStr)
+      )
       
-      const fixedForDay = allFixed.filter(f => f.date === dateStr)
+      const fixedForDay = allFixed.filter(f => 
+        f.start_date <= dateStr && (f.end_date >= dateStr || !f.end_date)
+      )
 
       // Apply fixed assignments first
       for (const fixed of fixedForDay) {
@@ -108,8 +113,8 @@ serve(async (req) => {
           // Grade Eligibility (cannot fill roles requiring higher grade, meaning lower hierarchy number)
           if (staff.hierarchy_level > demandGradeHierarchy) continue
           
-          // Skill Eligibility
-          if (demand.required_skill && !staff.staff_skills.includes(demand.required_skill)) continue
+          // Skill Eligibility (Removed as per requirement)
+          // if (demand.required_skill && !staff.staff_skills.includes(demand.required_skill)) continue
 
           // Leave protection
           const isOnLeave = allLeaves.some(l => l.staff_id === staff.staff_id && l.start_date <= dateStr && l.end_date >= dateStr)
@@ -123,6 +128,26 @@ serve(async (req) => {
           const weekShiftsCount = assignments.filter(a => a.staff_id === staff.staff_id && a.date >= weekStart.toISOString().split('T')[0] && a.date <= weekEnd.toISOString().split('T')[0]).length
                + pastRoster.filter(a => a.staff_id === staff.staff_id && a.date >= weekStart.toISOString().split('T')[0] && a.date <= weekEnd.toISOString().split('T')[0]).length
           if (weekShiftsCount >= (staff.max_shifts_per_week || 6)) continue
+
+          // Max consecutive shifts check
+          const maxConsecutive = staff.max_consecutive_shifts || 6
+          let consecutiveCount = 0
+          let checkDate = new Date(current)
+          checkDate.setDate(checkDate.getDate() - 1)
+          
+          while (consecutiveCount <= maxConsecutive) {
+            const dStr = checkDate.toISOString().split('T')[0]
+            const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dStr)
+              || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dStr)
+            
+            if (worked) {
+              consecutiveCount++
+              checkDate.setDate(checkDate.getDate() - 1)
+            } else {
+              break
+            }
+          }
+          if (consecutiveCount >= maxConsecutive) continue
 
           // Already assigned on this day
           const alreadyAssigned = assignments.some(a => a.staff_id === staff.staff_id && a.date === dateStr)

@@ -43,13 +43,8 @@ const CONSTRAINTS = [
   },
   {
     name: 'Grade Eligibility',
-    description: 'Staff cannot fill roles that require a grade above their own level',
+    description: 'Staff can fill roles requiring their own grade or any level below it',
     icon: '🎖️',
-  },
-  {
-    name: 'Skill Requirement',
-    description: 'Staff must possess the required skills/certifications for each shift assignment',
-    icon: '✅',
   },
 ];
 

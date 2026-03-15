@@ -28,11 +28,18 @@ const SOFT_CONSTRAINTS = [
     description: 'Distribute total number of shifts evenly across all staff',
     icon: '⚖️',
   },
+  {
+    key: 'shift_coverage_utilisation',
+    name: 'Shift Coverage Utilisation',
+    description: 'Encourage assigning nurses beyond minimum coverage for efficiency',
+    icon: '📈',
+  },
 ];
 
 export default function SoftConstraintsPage() {
   const { user } = useAuth();
   const [priorities, setPriorities] = useState({});
+  const [savedPriorities, setSavedPriorities] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -46,6 +53,7 @@ export default function SoftConstraintsPage() {
     SOFT_CONSTRAINTS.forEach(sc => { map[sc.key] = 5; }); // defaults
     (data || []).forEach(row => { map[row.constraint_key] = row.priority; });
     setPriorities(map);
+    setSavedPriorities(map);
     setLoading(false);
   }, [user]);
 
@@ -69,6 +77,7 @@ export default function SoftConstraintsPage() {
         }, { onConflict: 'user_id,constraint_key' });
       }
       await logAudit(user.userId, 'UPDATE_SOFT_CONSTRAINTS', priorities);
+      setSavedPriorities({...priorities});
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -127,8 +136,8 @@ export default function SoftConstraintsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {[...SOFT_CONSTRAINTS]
           .sort((a, b) => {
-            const valA = priorities[a.key] || 5;
-            const valB = priorities[b.key] || 5;
+            const valA = savedPriorities[a.key] || 5;
+            const valB = savedPriorities[b.key] || 5;
             if (valA !== valB) return valB - valA;
             return a.name.localeCompare(b.name);
           })

@@ -13,12 +13,14 @@ export default function ShiftRequestsPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   const [staffId, setStaffId] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [shiftId, setShiftId] = useState('');
+  const [remark, setRemark] = useState('');
 
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
-  const [sortField, setSortField] = useState('date');
+  const [sortField, setSortField] = useState('start_date');
   const [sortOrder, setSortOrder] = useState('desc');
 
   const handleSort = (field) => {
@@ -35,9 +37,9 @@ export default function ShiftRequestsPage() {
     const supabase = getSupabase(user.userId);
 
     const [staffRes, shiftsRes, reqRes] = await Promise.all([
-      supabase.from('staff').select('staff_id, name').order('name'),
+      supabase.from('staff').select('staff_id, name, department_id').order('name'),
       supabase.from('shifts').select('shift_id, description, colour').order('start_time'),
-      supabase.from('fixed_assignments').select('*').order('date', { ascending: false })
+      supabase.from('fixed_assignments').select('*').order('start_date', { ascending: false })
     ]);
 
     setStaff(staffRes.data || []);
@@ -50,24 +52,32 @@ export default function ShiftRequestsPage() {
 
   const openAdd = () => {
     setStaffId(staff.length > 0 ? staff[0].staff_id : '');
-    setDate(new Date().toISOString().split('T')[0]);
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setEndDate(new Date().toISOString().split('T')[0]);
     setShiftId(shifts.length > 0 ? shifts[0].shift_id : '');
+    setRemark('');
     setModalOpen(true);
   };
 
   const save = async () => {
-    if (!staffId || !shiftId || !date) return;
+    if (!staffId || !shiftId || !startDate) return;
+    if (new Date(startDate) > new Date(endDate)) {
+      alert("End Date must be after Start Date");
+      return;
+    }
     setSaving(true);
     const supabase = getSupabase(user.userId);
 
     try {
       await supabase.from('fixed_assignments').insert({
         staff_id: staffId,
-        date,
+        start_date: startDate,
+        end_date: endDate,
         shift_id: shiftId,
+        remark: remark,
         user_id: user.userId
       });
-      await logAudit(user.userId, 'CREATE_SHIFT_REQUEST', { staff_id: staffId, date, shift_id: shiftId });
+      await logAudit(user.userId, 'CREATE_SHIFT_REQUEST', { staff_id: staffId, start_date: startDate, end_date: endDate, shift_id: shiftId });
       setModalOpen(false);
       loadData();
     } catch (err) {
@@ -79,10 +89,10 @@ export default function ShiftRequestsPage() {
   };
 
   const remove = async (item) => {
-    if (!confirm(`Delete shift request for ${item.staff_id} on ${item.date}?`)) return;
+    if (!confirm(`Delete shift request for ${item.staff_id} on ${item.start_date}?`)) return;
     const supabase = getSupabase(user.userId);
     await supabase.from('fixed_assignments').delete().eq('id', item.id);
-    await logAudit(user.userId, 'DELETE_SHIFT_REQUEST', { staff_id: item.staff_id, date: item.date });
+    await logAudit(user.userId, 'DELETE_SHIFT_REQUEST', { staff_id: item.staff_id, start_date: item.start_date });
     loadData();
   };
 
@@ -98,20 +108,27 @@ export default function ShiftRequestsPage() {
   const filtered = items.filter(i =>
     i.staff_id.toLowerCase().includes(search.toLowerCase()) ||
     getStaffName(i.staff_id).toLowerCase().includes(search.toLowerCase()) ||
-    i.date.includes(search) ||
-    i.shift_id.toLowerCase().includes(search.toLowerCase())
+    i.start_date.includes(search) ||
+    i.shift_id.toLowerCase().includes(search.toLowerCase()) ||
+    (i.remark || '').toLowerCase().includes(search.toLowerCase())
   ).sort((a, b) => {
     let aVal = a[sortField];
     let bVal = b[sortField];
     if (sortField === 'name') {
       aVal = getStaffName(a.staff_id);
       bVal = getStaffName(b.staff_id);
+    } else if (sortField === 'department_id') {
+      const sA = staff.find(st => st.staff_id === a.staff_id);
+      const sB = staff.find(st => st.staff_id === b.staff_id);
+      aVal = sA ? sA.department_id : '';
+      bVal = sB ? sB.department_id : '';
     }
+    
     if (!aVal) aVal = '';
     if (!bVal) bVal = '';
-    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-    return 0;
+    
+    const res = aVal.localeCompare(bVal, undefined, { numeric: true });
+    return sortOrder === 'asc' ? res : -res;
   });
 
   return (
@@ -158,15 +175,22 @@ export default function ShiftRequestsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
-                  Staff {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('staff_id')}>
+                  Staff ID {sortField === 'staff_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
                 </th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('date')}>
-                  Date {sortField === 'date' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
+                  Name {sortField === 'name' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('department_id')}>
+                  Department {sortField === 'department_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('start_date')}>
+                  Date {sortField === 'start_date' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
                 </th>
                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('shift_id')}>
                   Requested Shift {sortField === 'shift_id' && <ArrowUpDown size={12} style={{marginLeft: 4, verticalAlign: 'middle'}}/>}
                 </th>
+                <th>Remark</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -176,13 +200,12 @@ export default function ShiftRequestsPage() {
                 const shiftInfo = getShiftInfo(item.shift_id);
                 return (
                   <tr key={item.id}>
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 500 }}>{getStaffName(item.staff_id)}</span>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{item.staff_id}</span>
-                      </div>
+                    <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.staff_id}</td>
+                    <td style={{ fontWeight: 500 }}>{getStaffName(item.staff_id)}</td>
+                    <td>{staff.find(st => st.staff_id === item.staff_id)?.department_id || '—'}</td>
+                    <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>
+                      {item.start_date} {item.start_date !== item.end_date ? `to ${item.end_date}` : ''}
                     </td>
-                    <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.date}</td>
                     <td>
                       <span className="badge" style={{
                         background: shiftInfo?.colour || 'var(--bg-tertiary)',
@@ -226,9 +249,15 @@ export default function ShiftRequestsPage() {
           </select>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Date</label>
-          <input type="date" className="form-input" value={date} onChange={e => setDate(e.target.value)} />
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Start Date</label>
+            <input type="date" className="form-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">End Date (Inclusive)</label>
+            <input type="date" className="form-input" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate} />
+          </div>
         </div>
 
         <div className="form-group">
@@ -239,6 +268,11 @@ export default function ShiftRequestsPage() {
             ))}
             {shifts.length === 0 && <option value="" disabled>No shifts defined yet</option>}
           </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Remark</label>
+          <input type="text" className="form-input" value={remark} onChange={e => setRemark(e.target.value)} placeholder="Reason for request..." />
         </div>
 
         <div style={{

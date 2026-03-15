@@ -21,12 +21,10 @@ export default function DemandPage() {
   const [filterDept, setFilterDept] = useState('');
 
   const [form, setForm] = useState({
-    date_start: '',
-    date_end: '',
     department_id: '',
     shift_id: '',
     requirements: [
-      { required_grade: '', required_skill: '', minimum_staff: 1 }
+      { required_grade: '', minimum_staff: 1 }
     ]
   });
 
@@ -62,12 +60,10 @@ export default function DemandPage() {
   const openAdd = () => {
     setEditing(null);
     setForm({
-      date_start: '',
-      date_end: '',
       department_id: filterDept || departments[0]?.department_id || '',
       shift_id: shifts[0]?.shift_id || '',
       requirements: [
-        { required_grade: grades[0]?.grade_id || '', required_skill: '', minimum_staff: 1 }
+        { required_grade: grades[0]?.grade_id || '', minimum_staff: 1 }
       ]
     });
     setModalOpen(true);
@@ -77,11 +73,8 @@ export default function DemandPage() {
     setEditing(item);
     setForm({ 
       ...item, 
-      date_start: item.date_start || '', 
-      date_end: item.date_end || '',
       requirements: [{
         required_grade: item.required_grade,
-        required_skill: item.required_skill || '',
         minimum_staff: item.minimum_staff
       }]
     });
@@ -99,12 +92,7 @@ export default function DemandPage() {
       }
     }
 
-    if (form.date_start && form.date_end && new Date(form.date_start) > new Date(form.date_end)) {
-      alert('End Date must be on or after Start Date.');
-      return;
-    }
     setSaving(true);
-
     const supabase = getSupabase(user.userId);
     
     try {
@@ -112,12 +100,12 @@ export default function DemandPage() {
         // If editing, we just update the specific underlying demand record since the edit UI
         // was opened from a specific row
         const record = {
-          date_start: form.date_start || null,
-          date_end: form.date_end || null,
+          date_start: null,
+          date_end: null,
           department_id: form.department_id,
           shift_id: form.shift_id,
           required_grade: form.requirements[0].required_grade,
-          required_skill: form.requirements[0].required_skill || null,
+          required_skill: null,
           minimum_staff: form.requirements[0].minimum_staff,
           user_id: user.userId
         };
@@ -126,12 +114,12 @@ export default function DemandPage() {
       } else {
         // If adding new, we insert a row for each requirement object in the array
         const records = form.requirements.map(req => ({
-          date_start: form.date_start || null,
-          date_end: form.date_end || null,
+          date_start: null,
+          date_end: null,
           department_id: form.department_id,
           shift_id: form.shift_id,
           required_grade: req.required_grade,
-          required_skill: req.required_skill || null,
+          required_skill: null,
           minimum_staff: req.minimum_staff,
           user_id: user.userId
         }));
@@ -164,18 +152,13 @@ export default function DemandPage() {
     const shiftTimes = {};
     shifts.forEach(s => shiftTimes[s.shift_id] = s.start_time);
     
-    // Sort items by department, then shift start time, then dates
+    // Sort items by department, then shift start time
     const sortedFiltered = [...filtered].sort((a, b) => {
       if (a.department_id !== b.department_id) return a.department_id.localeCompare(b.department_id);
       
       const timeA = shiftTimes[a.shift_id] || '23:59';
       const timeB = shiftTimes[b.shift_id] || '23:59';
-      if (timeA !== timeB) return timeA.localeCompare(timeB);
-      
-      const dsA = a.date_start || '0000-00-00';
-      const dsB = b.date_start || '0000-00-00';
-      if (dsA !== dsB) return dsB.localeCompare(dsA);
-      return 0;
+      return timeA.localeCompare(timeB);
     });
 
     const groups = {};
@@ -257,9 +240,7 @@ export default function DemandPage() {
                       <table className="data-table" style={{ margin: 0, border: 'none', borderTop: '1px solid var(--border-color)' }}>
                         <thead>
                           <tr>
-                            <th>Date Range</th>
                             <th>Grade Required</th>
-                            <th>Specific Skill</th>
                             <th>Headcount</th>
                             <th style={{ textAlign: 'right', width: 60 }}></th>
                           </tr>
@@ -267,20 +248,8 @@ export default function DemandPage() {
                         <tbody>
                           {requirements.map(req => (
                             <tr key={req.id}>
-                              <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                                {req.date_start ? `${req.date_start}${req.date_end && req.date_end !== req.date_start ? ` → ${req.date_end}` : ''}` : <span style={{ color: 'var(--text-tertiary)'}}>Always applicable</span>}
-                              </td>
                               <td>
                                 <span className="badge">{req.required_grade}</span>
-                              </td>
-                              <td>
-                                {req.required_skill ? (
-                                  <span className="badge" style={{ border: '1px solid var(--accent-info)', color: 'var(--accent-info)', background: 'transparent' }}>
-                                    {req.required_skill}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>Any standard skills</span>
-                                )}
                               </td>
                               <td style={{ fontWeight: 600 }}>{req.minimum_staff}</td>
                               <td>
@@ -308,17 +277,7 @@ export default function DemandPage() {
           <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving...' : (editing ? 'Save Changes' : 'Add Requirement')}</button>
         </>}
       >
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Start Date (Optional)</label>
-            <input type="date" className="form-input" value={form.date_start} onChange={e => setForm({ ...form, date_start: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">End Date (Optional)</label>
-            <input type="date" className="form-input" value={form.date_end} onChange={e => setForm({ ...form, date_end: e.target.value })} min={form.date_start} />
-          </div>
-        </div>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '-12px', marginBottom: '16px' }}>Leave dates empty to make this requirement permanent/always applicable.</p>
+
 
         <div className="form-row">
           <div className="form-group">
@@ -344,8 +303,7 @@ export default function DemandPage() {
               <button 
                 className="btn btn-sm btn-ghost" 
                 onClick={() => setForm(f => ({
-                  ...f, 
-                  requirements: [...f.requirements, { required_grade: grades[0]?.grade_id || '', required_skill: '', minimum_staff: 1 }]
+                  requirements: [...f.requirements, { required_grade: grades[0]?.grade_id || '', minimum_staff: 1 }]
                 }))}
               >
                 + Add Role
@@ -375,17 +333,7 @@ export default function DemandPage() {
                 </select>
               </div>
               
-              <div style={{ flex: 1.5 }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>Specific Skill (Optional)</label>
-                <select className="form-input" value={req.required_skill} onChange={e => {
-                  const newReqs = [...form.requirements];
-                  newReqs[idx].required_skill = e.target.value;
-                  setForm({ ...form, requirements: newReqs });
-                }}>
-                  <option value="">-- None --</option>
-                  {skills.map(s => <option key={s.skill_id} value={s.skill_id}>{s.skill_id}</option>)}
-                </select>
-              </div>
+
               
               <div style={{ flex: 1 }}>
                 <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>Headcount</label>
