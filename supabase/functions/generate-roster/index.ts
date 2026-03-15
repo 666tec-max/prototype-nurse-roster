@@ -200,50 +200,45 @@ serve(async (req) => {
 
           // 7. Night Shift Recovery
           // 1 night -> 1 off | 2-3 nights -> 2 off | 4 nights -> 3 off | Max 4 consecutive nights
-          let nightC = 0;
-          let checkN = new Date(dateStr);
-          checkN.setDate(checkN.getDate() - 1);
-          while (nightC < 5) {
-            const dS = checkN.toISOString().split('T')[0];
+          
+          const getRecoveryRequired = (streak: number) => {
+            if (streak === 1) return 1;
+            if (streak === 2 || streak === 3) return 2;
+            if (streak >= 4) return 3;
+            return 0;
+          };
+
+          // Find the last night shift streak and how many days off have been taken since
+          let streakCount = 0;
+          let daysSinceStreak = 0;
+          let foundStreak = false;
+          let checkRD = new Date(dateStr);
+          
+          // Safety lookback up to 10 days
+          for (let i = 1; i <= 10; i++) {
+            checkRD.setDate(checkRD.getDate() - 1);
+            const dS = checkRD.toISOString().split('T')[0];
             const a = assignments.find(a => a.staff_id === staff.staff_id && a.date === dS)
                    || pastRoster.find(a => a.staff_id === staff.staff_id && a.date === dS);
-            if (a && isNightShift(a.shift_id)) { nightC++; checkN.setDate(checkN.getDate() - 1); }
-            else break;
+            
+            if (a && isNightShift(a.shift_id)) {
+              streakCount++;
+              foundStreak = true;
+            } else if (foundStreak) {
+              // Streak ended before this day
+              break;
+            } else {
+              // Still looking for a streak
+              daysSinceStreak++;
+            }
           }
 
           if (isNightShift(demand.shift_id)) {
-            if (nightC >= 4) return false; // Max 4 consecutive
+            if (streakCount >= 4 && daysSinceStreak === 0) return false; // Already worked 4 nights in a row
           } else {
-            // Trying to book a non-night shift (or just stay off)
-            // If nightC > 0, they are in recovery
-            if (nightC === 1) return false; // Need 1 day off
-            if ((nightC === 2 || nightC === 3)) {
-                // Need 2 days off. Check if they had 1 day off already.
-                let offDays = 0;
-                let checkO = new Date(dateStr);
-                checkO.setDate(checkO.getDate() - 1);
-                while (offDays < 2) {
-                    const dS = checkO.toISOString().split('T')[0];
-                    const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dS)
-                                || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dS);
-                    if (!worked) { offDays++; checkO.setDate(checkO.getDate() - 1); }
-                    else break;
-                }
-                if (offDays < 2) return false;
-            }
-            if (nightC === 4) {
-               let offDays = 0;
-               let checkO = new Date(dateStr);
-               checkO.setDate(checkO.getDate() - 1);
-               while (offDays < 3) {
-                   const dS = checkO.toISOString().split('T')[0];
-                   const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dS)
-                               || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dS);
-                   if (!worked) { offDays++; checkO.setDate(checkO.getDate() - 1); }
-                   else break;
-               }
-               if (offDays < 3) return false;
-            }
+            // Non-night shift: check if in recovery
+            const required = getRecoveryRequired(streakCount);
+            if (daysSinceStreak < required) return false;
           }
 
           return true;
