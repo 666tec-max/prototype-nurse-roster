@@ -119,15 +119,18 @@ export default function RosterPage() {
     const supabase = getSupabase(user.userId);
     const warnings = [];
 
-    // Check demand exists
+    // Check demand exists (considering null dates mean "all dates")
     const { data: demandData } = await supabase
       .from('demand')
       .select('*')
-      .eq('department_id', filterDept)
-      .lte('date_start', endDate)
-      .gte('date_end', startDate);
+      .eq('department_id', filterDept);
 
-    if (!demandData || demandData.length === 0) {
+    const relevantDemand = (demandData || []).filter(d => 
+      (!d.date_start || d.date_start <= endDate) && 
+      (!d.date_end || d.date_end >= startDate)
+    );
+
+    if (relevantDemand.length === 0) {
       warnings.push('No demand configured for this department and date range. No shifts will be generated.');
     }
 
@@ -153,12 +156,12 @@ export default function RosterPage() {
       warnings.push(`${leaves.length} approved leave request(s) overlap with this period — will be respected.`);
     }
 
-    // Check for shift requests
+    // Check for shift requests using start_date and end_date
     const { data: shiftReqs } = await supabase
       .from('fixed_assignments')
-      .select('staff_id, date, shift_id')
-      .gte('date', startDate)
-      .lte('date', endDate);
+      .select('staff_id, start_date, end_date, shift_id')
+      .lte('start_date', endDate)
+      .gte('end_date', startDate);
 
     if (shiftReqs && shiftReqs.length > 0) {
       warnings.push(`${shiftReqs.length} shift request(s) will be enforced as hard constraints.`);

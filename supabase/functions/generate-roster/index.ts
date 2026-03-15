@@ -27,16 +27,21 @@ serve(async (req) => {
     )
 
     // 1. Fetch all necessary data
-    const sevenDaysAgo = new Date(new Date(start_date).getTime() - 7 * 24 * 3600 * 1000).toISOString().split('T')[0];
-    const [staffRes, demandRes, leavesRes, shiftsRes, skillsRes, gradesRes, fixedRes, pastRosterRes] = await Promise.all([
-      supabaseClient.from('staff').select('*'),
+    const startObj = new Date(start_date);
+    const firstOfMonth = new Date(startObj.getFullYear(), startObj.getMonth(), 1).toISOString().split('T')[0];
+    const sevenDaysAgo = new Date(startObj.getTime() - 7 * 24 * 3600 * 1000).toISOString().split('T')[0];
+    
+    const [staffRes, demandRes, leavesRes, shiftsRes, skillsRes, gradesRes, fixedRes, pastRosterRes, softRes, monthRosterRes] = await Promise.all([
+      supabaseClient.from('staff').select('*').eq('department_id', department_id),
       supabaseClient.from('demand').select('*').eq('department_id', department_id),
       supabaseClient.from('leave_requests').select('*').eq('status', 'Approved'),
       supabaseClient.from('shifts').select('*'),
       supabaseClient.from('staff_skills').select('*'),
       supabaseClient.from('grades').select('*'),
       supabaseClient.from('fixed_assignments').select('*'),
-      supabaseClient.from('roster').select('*').gte('date', sevenDaysAgo).lte('date', start_date)
+      supabaseClient.from('roster').select('*').gte('date', sevenDaysAgo).lt('date', start_date),
+      supabaseClient.from('soft_constraints').select('*'),
+      supabaseClient.from('roster').select('*').gte('date', firstOfMonth).lt('date', start_date)
     ])
 
     if (staffRes.error) throw staffRes.error;
@@ -55,20 +60,43 @@ serve(async (req) => {
     const allGrades = gradesRes.data || []
     const allFixed = fixedRes.data || []
     const pastRoster = pastRosterRes.data || []
+    const softConstraints = softRes.data || []
+    const monthRoster = monthRosterRes.data || []
 
     const gradesMap = new Map(allGrades.map(g => [g.grade_id, g.hierarchy_level]))
     const shiftsMap = new Map(allShifts.map(s => [s.shift_id, s]))
+    const softMap = new Map(softConstraints.map(sc => [sc.constraint_key, sc.priority]))
 
-    // Attach skills and grade hierarchy to staff
-    const allStaff = allStaffRaw
-      .filter(staff => !staff.department_id || staff.department_id === department_id)
-      .map(staff => ({
+    // Helper to check if a shift is a night shift
+    const isNightShift = (shiftId: string) => {
+      const s = shiftsMap.get(shiftId);
+      return s && s.end_time < s.start_time;
+    }
+
+    // Attach skills and grade hierarchy to staff, and calc initial monthly hours
+    const allStaff = allStaffRaw.map(staff => {
+      const staffMonthRoster = monthRoster.filter(r => r.staff_id === staff.staff_id);
+      let initialHours = 0;
+      for (const r of staffMonthRoster) {
+        const s = shiftsMap.get(r.shift_id);
+        if (s) {
+          const start = new Date(`2000-01-01T${s.start_time}`);
+          let end = new Date(`2000-01-01T${s.end_time}`);
+          if (end < start) end.setDate(end.getDate() + 1);
+          initialHours += (end.getTime() - start.getTime()) / (1000 * 3600);
+        }
+      }
+
+      return {
         ...staff,
         staff_skills: allStaffSkills.filter(ss => ss.staff_id === staff.staff_id).map(ss => ss.skill_id),
-        hierarchy_level: gradesMap.get(staff.grade_id) || 99
-      }))
+        hierarchy_level: gradesMap.get(staff.grade_id) || 99,
+        current_month_hours: initialHours,
+        total_shifts: staffMonthRoster.length
+      }
+    })
 
-    const assignments = []
+    const assignments: any[] = []
     const rosterGroupId = crypto.randomUUID()
     
     let current = new Date(start_date)
@@ -76,9 +104,7 @@ serve(async (req) => {
     
     while (current <= end) {
       const dateStr = current.toISOString().split('T')[0]
-      const prevDate = new Date(current)
-      prevDate.setDate(prevDate.getDate() - 1)
-      const prevDateStr = prevDate.toISOString().split('T')[0]
+      const isWeekend = current.getDay() === 0 || current.getDay() === 6;
 
       const dailyDemand = allDemand.filter(d => 
         (!d.date_start || d.date_start <= dateStr) && 
@@ -89,15 +115,27 @@ serve(async (req) => {
         f.start_date <= dateStr && (f.end_date >= dateStr || !f.end_date)
       )
 
-      // Apply fixed assignments first
+      // Apply fixed assignments first (Hard Constraints)
       for (const fixed of fixedForDay) {
-        assignments.push({
-          user_id: user_id,
-          staff_id: fixed.staff_id,
-          date: dateStr,
-          shift_id: fixed.shift_id,
-          roster_group_id: rosterGroupId
-        })
+        const staff = allStaff.find(s => s.staff_id === fixed.staff_id);
+        if (staff) {
+          assignments.push({
+            user_id: user_id,
+            staff_id: fixed.staff_id,
+            date: dateStr,
+            shift_id: fixed.shift_id,
+            roster_group_id: rosterGroupId
+          });
+          // Update hours and shift count
+          const s = shiftsMap.get(fixed.shift_id);
+          if (s) {
+            const startT = new Date(`2000-01-01T${s.start_time}`);
+            let endT = new Date(`2000-01-01T${s.end_time}`);
+            if (endT < startT) endT.setDate(endT.getDate() + 1);
+            staff.current_month_hours += (endT.getTime() - startT.getTime()) / (1000 * 3600);
+          }
+          staff.total_shifts++;
+        }
       }
 
       for (const demand of dailyDemand) {
@@ -107,65 +145,154 @@ serve(async (req) => {
         const demandGradeHierarchy = gradesMap.get(demand.required_grade) || 99
         let assignedCount = assignments.filter(a => a.date === dateStr && a.shift_id === demand.shift_id).length
 
-        for (const staff of allStaff) {
-          if (assignedCount >= demand.minimum_staff) break
+        // Soft Constraint: Shift Coverage Utilisation
+        const utilPriority = softMap.get('shift_coverage_utilisation') || 0;
+        const targetStaff = (utilPriority > 7) ? demand.minimum_staff + 1 : demand.minimum_staff;
 
-          // Grade Eligibility (cannot fill roles requiring higher grade, meaning lower hierarchy number)
-          if (staff.hierarchy_level > demandGradeHierarchy) continue
-          
-          // Skill Eligibility (Removed as per requirement)
-          // if (demand.required_skill && !staff.staff_skills.includes(demand.required_skill)) continue
+        const eligibleStaff = allStaff.filter(staff => {
+          if (assignedCount >= targetStaff) return false;
 
-          // Leave protection
-          const isOnLeave = allLeaves.some(l => l.staff_id === staff.staff_id && l.start_date <= dateStr && l.end_date >= dateStr)
-          if (isOnLeave) continue
-          
-          // Max shifts check
-          const weekStart = new Date(current)
-          weekStart.setDate(weekStart.getDate() - weekStart.getDay()) // Sunday
-          const weekEnd = new Date(weekStart)
-          weekEnd.setDate(weekEnd.getDate() + 6)
-          const weekShiftsCount = assignments.filter(a => a.staff_id === staff.staff_id && a.date >= weekStart.toISOString().split('T')[0] && a.date <= weekEnd.toISOString().split('T')[0]).length
-               + pastRoster.filter(a => a.staff_id === staff.staff_id && a.date >= weekStart.toISOString().split('T')[0] && a.date <= weekEnd.toISOString().split('T')[0]).length
-          if (weekShiftsCount >= (staff.max_shifts_per_week || 6)) continue
+          // 1. Grade Eligibility
+          if (staff.hierarchy_level > demandGradeHierarchy) return false;
 
-          // Max consecutive shifts check
-          const maxConsecutive = staff.max_consecutive_shifts || 6
-          let consecutiveCount = 0
-          let checkDate = new Date(current)
-          checkDate.setDate(checkDate.getDate() - 1)
-          
-          while (consecutiveCount <= maxConsecutive) {
-            const dStr = checkDate.toISOString().split('T')[0]
-            const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dStr)
-              || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dStr)
-            
-            if (worked) {
-              consecutiveCount++
-              checkDate.setDate(checkDate.getDate() - 1)
-            } else {
-              break
+          // 2. Already assigned today
+          if (assignments.some(a => a.staff_id === staff.staff_id && a.date === dateStr)) return false;
+
+          // 3. Leave protection
+          if (allLeaves.some(l => l.staff_id === staff.staff_id && l.start_date <= dateStr && l.end_date >= dateStr)) return false;
+
+          // 4. Monthly hours limit (196h)
+          const s = shiftsMap.get(demand.shift_id);
+          let shiftHours = 0;
+          if (s) {
+              const startT = new Date(`2000-01-01T${s.start_time}`);
+              let endT = new Date(`2000-01-01T${s.end_time}`);
+              if (endT < startT) endT.setDate(endT.getDate() + 1);
+              shiftHours = (endT.getTime() - startT.getTime()) / (1000 * 3600);
+          }
+          if (staff.current_month_hours + shiftHours > 196) return false;
+
+          // 5. Max shifts per week
+          const curD = new Date(dateStr);
+          const weekStart = new Date(curD);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          const wStr = weekStart.toISOString().split('T')[0];
+          const weStr = weekEnd.toISOString().split('T')[0];
+          const weekShifts = assignments.filter(a => a.staff_id === staff.staff_id && a.date >= wStr && a.date <= weStr).length
+                           + pastRoster.filter(a => a.staff_id === staff.staff_id && a.date >= wStr && a.date <= weStr).length;
+          if (weekShifts >= (staff.max_shifts_per_week || 6)) return false;
+
+          // 6. Max consecutive shifts
+          const maxC = staff.max_consecutive_shifts || 6;
+          let countC = 0;
+          let checkD = new Date(dateStr);
+          checkD.setDate(checkD.getDate() - 1);
+          while (countC < 10) { // Safety break
+            const dS = checkD.toISOString().split('T')[0];
+            const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dS)
+                        || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dS);
+            if (worked) { countC++; checkD.setDate(checkD.getDate() - 1); }
+            else break;
+          }
+          if (countC >= maxC) return false;
+
+          // 7. Night Shift Recovery
+          // 1 night -> 1 off | 2-3 nights -> 2 off | 4 nights -> 3 off | Max 4 consecutive nights
+          let nightC = 0;
+          let checkN = new Date(dateStr);
+          checkN.setDate(checkN.getDate() - 1);
+          while (nightC < 5) {
+            const dS = checkN.toISOString().split('T')[0];
+            const a = assignments.find(a => a.staff_id === staff.staff_id && a.date === dS)
+                   || pastRoster.find(a => a.staff_id === staff.staff_id && a.date === dS);
+            if (a && isNightShift(a.shift_id)) { nightC++; checkN.setDate(checkN.getDate() - 1); }
+            else break;
+          }
+
+          if (isNightShift(demand.shift_id)) {
+            if (nightC >= 4) return false; // Max 4 consecutive
+          } else {
+            // Trying to book a non-night shift (or just stay off)
+            // If nightC > 0, they are in recovery
+            if (nightC === 1) return false; // Need 1 day off
+            if ((nightC === 2 || nightC === 3)) {
+                // Need 2 days off. Check if they had 1 day off already.
+                let offDays = 0;
+                let checkO = new Date(dateStr);
+                checkO.setDate(checkO.getDate() - 1);
+                while (offDays < 2) {
+                    const dS = checkO.toISOString().split('T')[0];
+                    const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dS)
+                                || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dS);
+                    if (!worked) { offDays++; checkO.setDate(checkO.getDate() - 1); }
+                    else break;
+                }
+                if (offDays < 2) return false;
+            }
+            if (nightC === 4) {
+               let offDays = 0;
+               let checkO = new Date(dateStr);
+               checkO.setDate(checkO.getDate() - 1);
+               while (offDays < 3) {
+                   const dS = checkO.toISOString().split('T')[0];
+                   const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dS)
+                               || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dS);
+                   if (!worked) { offDays++; checkO.setDate(checkO.getDate() - 1); }
+                   else break;
+               }
+               if (offDays < 3) return false;
             }
           }
-          if (consecutiveCount >= maxConsecutive) continue
 
-          // Already assigned on this day
-          const alreadyAssigned = assignments.some(a => a.staff_id === staff.staff_id && a.date === dateStr)
-          if (alreadyAssigned) continue
+          return true;
+        });
 
-          // Night Shift Recovery: check if staff worked a night shift yesterday
-          // A night shift often has end time < start time (e.g. 20:00 to 08:00)
-          const workedYesterday = assignments.find(a => a.staff_id === staff.staff_id && a.date === prevDateStr) 
-            || pastRoster.find(a => a.staff_id === staff.staff_id && a.date === prevDateStr)
-          
-          if (workedYesterday) {
-            const yesterdayShift = shiftsMap.get(workedYesterday.shift_id) as any
-            if (yesterdayShift && yesterdayShift.end_time < yesterdayShift.start_time) {
-              // Worked night shift yesterday, must rest today
-              continue
+        // Scoring for Soft Constraints
+        const scoredStaff = eligibleStaff.map(staff => {
+            let score = 0;
+
+            // Total Shift Fairness
+            const totalShiftPriority = softMap.get('total_shift_fairness') || 5;
+            score -= (staff.total_shifts * totalShiftPriority);
+
+            // Night Fairness
+            if (isNightShift(demand.shift_id)) {
+                const nightPriority = softMap.get('night_fairness') || 5;
+                const nightCount = pastRoster.filter(a => a.staff_id === staff.staff_id && isNightShift(a.shift_id)).length
+                                 + assignments.filter(a => a.staff_id === staff.staff_id && isNightShift(a.shift_id)).length;
+                score -= (nightCount * nightPriority * 2);
             }
-          }
-          
+
+            // Weekend Fairness
+            if (isWeekend) {
+                const weekendPriority = softMap.get('weekend_fairness') || 5;
+                const weekendCount = pastRoster.filter(a => {
+                    const d = new Date(a.date);
+                    return a.staff_id === staff.staff_id && (d.getDay() === 0 || d.getDay() === 6);
+                }).length + assignments.filter(a => {
+                    const d = new Date(a.date);
+                    return a.staff_id === staff.staff_id && (d.getDay() === 0 || d.getDay() === 6);
+                }).length;
+                score -= (weekendCount * weekendPriority * 2);
+            }
+
+            // Shift Type Variety
+            const varietyPriority = softMap.get('shift_type_variety') || 5;
+            const lastA = assignments.filter(a => a.staff_id === staff.staff_id).pop() 
+                       || pastRoster.filter(a => a.staff_id === staff.staff_id).pop();
+            if (lastA && lastA.shift_id === demand.shift_id) {
+                score -= (varietyPriority * 10);
+            }
+
+            return { staff, score };
+        }).sort((a, b) => b.score - a.score);
+
+        for (const item of scoredStaff) {
+          if (assignedCount >= targetStaff) break;
+          const staff = item.staff;
+
           assignments.push({
             user_id: user_id,
             staff_id: staff.staff_id,
@@ -174,6 +301,15 @@ serve(async (req) => {
             roster_group_id: rosterGroupId
           })
           
+          // Update staff state for next iteration
+          const s = shiftsMap.get(demand.shift_id);
+          if (s) {
+              const startT = new Date(`2000-01-01T${s.start_time}`);
+              let endT = new Date(`2000-01-01T${s.end_time}`);
+              if (endT < startT) endT.setDate(endT.getDate() + 1);
+              staff.current_month_hours += (endT.getTime() - startT.getTime()) / (1000 * 3600);
+          }
+          staff.total_shifts++;
           assignedCount++
         }
       }
