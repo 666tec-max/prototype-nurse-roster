@@ -67,7 +67,7 @@ serve(async (req) => {
     const shiftsMap = new Map(allShifts.map(s => [s.shift_id, s]))
     const softMap = new Map(softConstraints.map(sc => [sc.constraint_key, sc.priority]))
 
-    // Helper to check if a shift is a night shift
+    // Helper to check if a shift is a night shift (end_time < start_time means it crosses midnight)
     const isNightShift = (shiftId: string) => {
       const s = shiftsMap.get(shiftId);
       return s && s.end_time < s.start_time;
@@ -115,10 +115,12 @@ serve(async (req) => {
         f.start_date <= dateStr && (f.end_date >= dateStr || !f.end_date)
       )
 
-      // Apply fixed assignments first (Hard Constraints)
+      // Apply fixed assignments first (Hard Constraint: Approved Shift Requests)
       for (const fixed of fixedForDay) {
         const staff = allStaff.find(s => s.staff_id === fixed.staff_id);
-        if (staff) {
+        // Only add if not already assigned on this day (avoid duplicates if ranges overlap)
+        const alreadyAssigned = assignments.some(a => a.staff_id === fixed.staff_id && a.date === dateStr);
+        if (staff && !alreadyAssigned) {
           assignments.push({
             user_id: user_id,
             staff_id: fixed.staff_id,
@@ -146,22 +148,26 @@ serve(async (req) => {
         let assignedCount = assignments.filter(a => a.date === dateStr && a.shift_id === demand.shift_id).length
 
         // Soft Constraint: Shift Coverage Utilisation
+        // If priority > 7, aim to overfill by 1 staff beyond minimum
         const utilPriority = softMap.get('shift_coverage_utilisation') || 0;
         const targetStaff = (utilPriority > 7) ? demand.minimum_staff + 1 : demand.minimum_staff;
 
         const eligibleStaff = allStaff.filter(staff => {
           if (assignedCount >= targetStaff) return false;
 
-          // 1. Grade Eligibility
+          // 1. Grade Eligibility (Hard Constraint)
           if (staff.hierarchy_level > demandGradeHierarchy) return false;
 
-          // 2. Already assigned today
+          // 2. Skill Eligibility (Hard Constraint) — only check if demand specifies a required skill
+          if (demand.required_skill && !staff.staff_skills.includes(demand.required_skill)) return false;
+
+          // 3. Already assigned today (Hard Constraint: Maximum One Shift Per Day)
           if (assignments.some(a => a.staff_id === staff.staff_id && a.date === dateStr)) return false;
 
-          // 3. Leave protection
+          // 4. Leave protection (Hard Constraint: Approved Leave Protection)
           if (allLeaves.some(l => l.staff_id === staff.staff_id && l.start_date <= dateStr && l.end_date >= dateStr)) return false;
 
-          // 4. Monthly hours limit (196h)
+          // 5. Monthly hours limit — 196h (Hard Constraint: Maximum Monthly Working Hours)
           const s = shiftsMap.get(demand.shift_id);
           let shiftHours = 0;
           if (s) {
@@ -172,7 +178,7 @@ serve(async (req) => {
           }
           if (staff.current_month_hours + shiftHours > 196) return false;
 
-          // 5. Max shifts per week
+          // 6. Max shifts per week (Hard Constraint: Maximum Shifts Per Week)
           const curD = new Date(dateStr);
           const weekStart = new Date(curD);
           weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -184,12 +190,12 @@ serve(async (req) => {
                            + pastRoster.filter(a => a.staff_id === staff.staff_id && a.date >= wStr && a.date <= weStr).length;
           if (weekShifts >= (staff.max_shifts_per_week || 6)) return false;
 
-          // 6. Max consecutive shifts
+          // 7. Max consecutive shifts (Hard Constraint: Maximum Consecutive Shifts)
           const maxC = staff.max_consecutive_shifts || 6;
           let countC = 0;
           let checkD = new Date(dateStr);
           checkD.setDate(checkD.getDate() - 1);
-          while (countC < 10) { // Safety break
+          while (countC < 10) {
             const dS = checkD.toISOString().split('T')[0];
             const worked = assignments.some(a => a.staff_id === staff.staff_id && a.date === dS)
                         || pastRoster.some(a => a.staff_id === staff.staff_id && a.date === dS);
@@ -198,8 +204,13 @@ serve(async (req) => {
           }
           if (countC >= maxC) return false;
 
-          // 7. Night Shift Recovery
-          // 1 night -> 1 off | 2-3 nights -> 2 off | 4 nights -> 3 off | Max 4 consecutive nights
+          // 8. Night Shift Recovery (Hard Constraint)
+          // Rules: 1 night → 1 off | 2-3 nights → 2 off | 4 nights → 3 off | Max 4 consecutive nights
+          //
+          // Algorithm: Walk backwards from yesterday.
+          //   Phase A: Count consecutive off-days immediately before today (= recovery days already taken).
+          //   Phase B: Once a night shift is found, count consecutive nights (= the prior night streak).
+          //   Stop Phase B when a non-night day is encountered.
           
           const getRecoveryRequired = (streak: number) => {
             if (streak === 1) return 1;
@@ -208,51 +219,64 @@ serve(async (req) => {
             return 0;
           };
 
-          // Find the last night shift streak and how many days off have been taken since
-          let streakCount = 0;
-          let daysSinceStreak = 0;
-          let foundStreak = false;
-          let checkRD = new Date(dateStr);
-          
-          // Safety lookback up to 10 days
+          let recoveryDaysTaken = 0;  // off-days immediately after the night streak
+          let nightStreakCount = 0;   // consecutive night shifts in the streak
+          let inRecoveryPhase = true; // true until we hit the first night shift
+
+          const lookback = new Date(dateStr);
           for (let i = 1; i <= 10; i++) {
-            checkRD.setDate(checkRD.getDate() - 1);
-            const dS = checkRD.toISOString().split('T')[0];
-            const a = assignments.find(a => a.staff_id === staff.staff_id && a.date === dS)
-                   || pastRoster.find(a => a.staff_id === staff.staff_id && a.date === dS);
-            
-            if (a && isNightShift(a.shift_id)) {
-              streakCount++;
-              foundStreak = true;
-            } else if (foundStreak) {
-              // Streak ended before this day
-              break;
+            lookback.setDate(lookback.getDate() - 1);
+            const dS = lookback.toISOString().split('T')[0];
+
+            const entry = assignments.find(a => a.staff_id === staff.staff_id && a.date === dS)
+                       || pastRoster.find(a => a.staff_id === staff.staff_id && a.date === dS);
+
+            if (inRecoveryPhase) {
+              if (!entry) {
+                // Still in off-day recovery phase — count this off-day
+                recoveryDaysTaken++;
+              } else if (isNightShift(entry.shift_id)) {
+                // Found the first night shift — switch to streak-counting phase
+                inRecoveryPhase = false;
+                nightStreakCount = 1;
+              } else {
+                // Worked a non-night shift before any night shift — no active night streak
+                break;
+              }
             } else {
-              // Still looking for a streak
-              daysSinceStreak++;
+              // In streak-counting phase
+              if (entry && isNightShift(entry.shift_id)) {
+                nightStreakCount++;
+              } else {
+                // Streak has ended
+                break;
+              }
             }
           }
 
-          if (isNightShift(demand.shift_id)) {
-            if (streakCount >= 4 && daysSinceStreak === 0) return false; // Already worked 4 nights in a row
-          } else {
-            // Non-night shift: check if in recovery
-            const required = getRecoveryRequired(streakCount);
-            if (daysSinceStreak < required) return false;
+          if (nightStreakCount > 0) {
+            if (isNightShift(demand.shift_id)) {
+              // Hard Constraint: Max 4 consecutive nights
+              if (nightStreakCount >= 4 && recoveryDaysTaken === 0) return false;
+            } else {
+              // Hard Constraint: Must take enough off-days after night streak before working again
+              const required = getRecoveryRequired(nightStreakCount);
+              if (recoveryDaysTaken < required) return false;
+            }
           }
 
           return true;
         });
 
-        // Scoring for Soft Constraints
+        // Scoring for Soft Constraints — higher score = preferred candidate
         const scoredStaff = eligibleStaff.map(staff => {
             let score = 0;
 
-            // Total Shift Fairness
+            // Total Shift Fairness: prefer staff with fewest shifts
             const totalShiftPriority = softMap.get('total_shift_fairness') || 5;
             score -= (staff.total_shifts * totalShiftPriority);
 
-            // Night Fairness
+            // Night Fairness: prefer staff with fewest night shifts
             if (isNightShift(demand.shift_id)) {
                 const nightPriority = softMap.get('night_fairness') || 5;
                 const nightCount = pastRoster.filter(a => a.staff_id === staff.staff_id && isNightShift(a.shift_id)).length
@@ -260,7 +284,7 @@ serve(async (req) => {
                 score -= (nightCount * nightPriority * 2);
             }
 
-            // Weekend Fairness
+            // Weekend Fairness: prefer staff with fewest weekend shifts
             if (isWeekend) {
                 const weekendPriority = softMap.get('weekend_fairness') || 5;
                 const weekendCount = pastRoster.filter(a => {
@@ -273,12 +297,17 @@ serve(async (req) => {
                 score -= (weekendCount * weekendPriority * 2);
             }
 
-            // Shift Type Variety
+            // Shift Type Variety: penalise recent consecutive same-shift-type assignments
+            // Count how many of the last 5 shifts were the same shift type, scaled by priority
             const varietyPriority = softMap.get('shift_type_variety') || 5;
-            const lastA = assignments.filter(a => a.staff_id === staff.staff_id).pop() 
-                       || pastRoster.filter(a => a.staff_id === staff.staff_id).pop();
-            if (lastA && lastA.shift_id === demand.shift_id) {
-                score -= (varietyPriority * 10);
+            if (varietyPriority > 0) {
+              const recentAssignments = [
+                ...pastRoster.filter(a => a.staff_id === staff.staff_id),
+                ...assignments.filter(a => a.staff_id === staff.staff_id)
+              ].sort((a, b) => a.date.localeCompare(b.date)).slice(-5);
+              
+              const sameShiftCount = recentAssignments.filter(a => a.shift_id === demand.shift_id).length;
+              score -= (sameShiftCount * varietyPriority * 5);
             }
 
             return { staff, score };

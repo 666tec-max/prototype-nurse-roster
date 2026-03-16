@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabase } from '../lib/supabase';
-import { CalendarRange, Wand2, Loader2, Download, AlertTriangle } from 'lucide-react';
+import { CalendarRange, Wand2, Loader2, Download, AlertTriangle, BarChart3 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function RosterPage() {
@@ -119,7 +119,6 @@ export default function RosterPage() {
     const supabase = getSupabase(user.userId);
     const warnings = [];
 
-    // Check demand exists (considering null dates mean "all dates")
     const { data: demandData } = await supabase
       .from('demand')
       .select('*')
@@ -134,7 +133,6 @@ export default function RosterPage() {
       warnings.push('No demand configured for this department and date range. No shifts will be generated.');
     }
 
-    // Check staff available
     const { data: staffData } = await supabase
       .from('staff')
       .select('staff_id')
@@ -144,7 +142,6 @@ export default function RosterPage() {
       warnings.push('No staff members assigned to this department.');
     }
 
-    // Check for approved leaves
     const { data: leaves } = await supabase
       .from('leave_requests')
       .select('staff_id, start_date, end_date')
@@ -156,7 +153,6 @@ export default function RosterPage() {
       warnings.push(`${leaves.length} approved leave request(s) overlap with this period — will be respected.`);
     }
 
-    // Check for shift requests using start_date and end_date
     const { data: shiftReqs } = await supabase
       .from('fixed_assignments')
       .select('staff_id, start_date, end_date, shift_id')
@@ -173,14 +169,12 @@ export default function RosterPage() {
   const generateRoster = async () => {
     if (!filterDept || !startDate || !endDate) return;
 
-    // Run validation first
     const warnings = await validateBeforeGenerate();
     setValidationWarnings(warnings);
 
-    // Block if no demand
     const blocking = warnings.filter(w => w.includes('No demand') || w.includes('No staff'));
     if (blocking.length > 0) {
-      return; // Don't generate, just show warnings
+      return;
     }
 
     setGenerating(true);
@@ -221,7 +215,6 @@ export default function RosterPage() {
   const exportToExcel = () => {
     if (rosterData.length === 0) return;
 
-    // Build rows: Date, Shift, Assigned Staff
     const rows = rosterData
       .sort((a, b) => a.date.localeCompare(b.date) || a.shift_id.localeCompare(b.shift_id))
       .map(r => ({
@@ -236,7 +229,6 @@ export default function RosterPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Roster');
 
-    // Auto-size columns
     const colWidths = Object.keys(rows[0] || {}).map(key => ({
       wch: Math.max(key.length, ...rows.map(r => String(r[key] || '').length)) + 2
     }));
@@ -273,6 +265,38 @@ export default function RosterPage() {
     const d = new Date(dateStr);
     return d.getDay() === 0 || d.getDay() === 6;
   };
+
+  // ─── Fairness Analysis Metrics ───────────────────────────────────────────────
+  const isNightShiftFn = (shiftId) => {
+    const shift = shiftsMap[shiftId];
+    if (!shift) return false;
+    return shift.end_time < shift.start_time;
+  };
+
+  const staffMetrics = {};
+  rosterData.forEach(r => {
+    if (!staffMetrics[r.staff_id]) {
+      staffMetrics[r.staff_id] = { night: 0, weekend: 0, total: 0 };
+    }
+    staffMetrics[r.staff_id].total++;
+    if (isWeekend(r.date)) staffMetrics[r.staff_id].weekend++;
+    if (isNightShiftFn(r.shift_id)) staffMetrics[r.staff_id].night++;
+  });
+
+  const fairnessStaffIds = Object.keys(staffMetrics).sort();
+  const staffCount = fairnessStaffIds.length;
+
+  const avgNight   = staffCount > 0 ? (fairnessStaffIds.reduce((s, id) => s + staffMetrics[id].night, 0) / staffCount).toFixed(1) : '—';
+  const avgWeekend = staffCount > 0 ? (fairnessStaffIds.reduce((s, id) => s + staffMetrics[id].weekend, 0) / staffCount).toFixed(1) : '—';
+  const avgTotal   = staffCount > 0 ? (fairnessStaffIds.reduce((s, id) => s + staffMetrics[id].total, 0) / staffCount).toFixed(1) : '—';
+
+  const getFairnessBar = (value, max) => {
+    if (!max || max === 0) return 0;
+    return Math.round((value / max) * 100);
+  };
+  const maxNight   = staffCount > 0 ? Math.max(...fairnessStaffIds.map(id => staffMetrics[id].night)) : 0;
+  const maxWeekend = staffCount > 0 ? Math.max(...fairnessStaffIds.map(id => staffMetrics[id].weekend)) : 0;
+  const maxTotal   = staffCount > 0 ? Math.max(...fairnessStaffIds.map(id => staffMetrics[id].total)) : 0;
 
   return (
     <div className="page-container">
@@ -351,7 +375,8 @@ export default function RosterPage() {
         </div>
       )}
 
-      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* Schedule Viewer */}
+      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', marginBottom: 20 }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3>Schedule Viewer</h3>
           {metadata && (
@@ -437,6 +462,92 @@ export default function RosterPage() {
           </div>
         )}
       </div>
+
+      {/* ── Fairness Analysis — shown only when roster exists ─────────────────── */}
+      {rosterData.length > 0 && (
+        <div className="card">
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <BarChart3 size={18} style={{ color: 'var(--accent-primary)' }} />
+            <h3 style={{ margin: 0 }}>Fairness Analysis</h3>
+          </div>
+
+          {/* Summary stat cards */}
+          <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{ textAlign: 'center', padding: '20px 12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Avg Night Shifts</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-primary)', lineHeight: 1 }}>{avgNight}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: 4 }}>per staff</div>
+            </div>
+            <div style={{ textAlign: 'center', padding: '20px 12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Avg Weekend Shifts</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-warning)', lineHeight: 1 }}>{avgWeekend}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: 4 }}>per staff</div>
+            </div>
+            <div style={{ textAlign: 'center', padding: '20px 12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Avg Total Shifts</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-info)', lineHeight: 1 }}>{avgTotal}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: 4 }}>per staff</div>
+            </div>
+          </div>
+
+          {/* Per-staff breakdown table with inline bar charts */}
+          <div style={{ padding: '20px' }}>
+            <table className="data-table" style={{ margin: 0 }}>
+              <thead>
+                <tr>
+                  <th>Staff Member</th>
+                  <th style={{ textAlign: 'center', width: 80 }}>Total</th>
+                  <th style={{ minWidth: 160 }}>Total Shifts</th>
+                  <th style={{ textAlign: 'center', width: 80 }}>Nights</th>
+                  <th style={{ minWidth: 160 }}>Night Shifts</th>
+                  <th style={{ textAlign: 'center', width: 80 }}>Weekends</th>
+                  <th style={{ minWidth: 160 }}>Weekend Shifts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fairnessStaffIds.map(staffId => {
+                  const m = staffMetrics[staffId];
+                  const staffName = staffMap[staffId]?.name || staffId;
+                  return (
+                    <tr key={staffId}>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 600 }}>{staffName}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{staffId}</span>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, fontSize: '1.1rem' }}>{m.total}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 8, background: 'var(--bg-tertiary)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${getFairnessBar(m.total, maxTotal)}%`, height: '100%', background: 'var(--accent-info)', borderRadius: 4, transition: 'width 0.3s ease' }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, fontSize: '1.1rem', color: m.night > 0 ? 'var(--accent-primary)' : 'var(--text-tertiary)' }}>{m.night}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 8, background: 'var(--bg-tertiary)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${getFairnessBar(m.night, maxNight)}%`, height: '100%', background: 'var(--accent-primary)', borderRadius: 4, transition: 'width 0.3s ease' }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, fontSize: '1.1rem', color: m.weekend > 0 ? 'var(--accent-warning)' : 'var(--text-tertiary)' }}>{m.weekend}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 8, background: 'var(--bg-tertiary)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${getFairnessBar(m.weekend, maxWeekend)}%`, height: '100%', background: 'var(--accent-warning)', borderRadius: 4, transition: 'width 0.3s ease' }} />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .spin {

@@ -15,7 +15,6 @@ import DemandPage from './pages/DemandPage';
 import HardConstraintsPage from './pages/HardConstraintsPage';
 import SoftConstraintsPage from './pages/SoftConstraintsPage';
 import RosterPage from './pages/RosterPage';
-import FairnessPage from './pages/FairnessPage';
 import ThemeSettingsPage from './pages/ThemeSettingsPage';
 import AuditLogPage from './pages/AuditLogPage';
 
@@ -44,7 +43,6 @@ function AppShell() {
             <Route path="/hard-constraints" element={<HardConstraintsPage />} />
             <Route path="/soft-constraints" element={<SoftConstraintsPage />} />
             <Route path="/roster" element={<RosterPage />} />
-            <Route path="/fairness" element={<FairnessPage />} />
             <Route path="/themes" element={<ThemeSettingsPage />} />
             <Route path="/audit-log" element={<AuditLogPage />} />
           </Routes>

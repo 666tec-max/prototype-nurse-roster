@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard, Building2, Users, Award, Sparkles,
-  Clock, CalendarRange, BarChart3, Palette, ScrollText,
+  Clock, CalendarRange, Palette, ScrollText,
   LogOut, ChevronLeft, ChevronRight, Stethoscope,
   ClipboardList, CalendarHeart, CalendarClock, Shield,
   SlidersHorizontal
@@ -27,7 +27,6 @@ const NAV_ITEMS = [
   { path: '/hard-constraints', icon: Shield, label: 'Hard Constraints' },
   { path: '/soft-constraints', icon: SlidersHorizontal, label: 'Soft Constraints' },
   { path: '/roster', icon: CalendarRange, label: 'Roster Generation' },
-  { path: '/fairness', icon: BarChart3, label: 'Fairness Analysis' },
 
   { type: 'section', label: 'Settings' },
   { path: '/departments', icon: Building2, label: 'Departments' },
