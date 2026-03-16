@@ -215,20 +215,27 @@ export default function RosterPage() {
   const exportToExcel = () => {
     if (rosterData.length === 0) return;
 
-    const rows = rosterData
-      .sort((a, b) => a.date.localeCompare(b.date) || a.shift_id.localeCompare(b.shift_id))
-      .map(r => ({
-        Date: r.date,
-        Shift: r.shift_id,
-        'Staff ID': r.staff_id,
-        'Staff Name': staffMap[r.staff_id]?.name || r.staff_id,
-        Grade: staffMap[r.staff_id]?.grade_id || '',
-      }));
+    const dates = getDatesBetween(startDate, endDate);
+    
+    // Create rows with Staff Member as first column and dates as subsequent columns
+    const rows = Object.keys(staffAssignments).sort().map(staffId => {
+      const staffName = staffMap[staffId]?.name || staffId;
+      const row = { 'Staff Member': staffName };
+      
+      dates.forEach(date => {
+        const dayName = getDayName(date);
+        const columnHeader = `${date} (${dayName})`;
+        row[columnHeader] = staffAssignments[staffId][date] || '-';
+      });
+      
+      return row;
+    });
 
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Roster');
 
+    // Auto-size columns
     const colWidths = Object.keys(rows[0] || {}).map(key => ({
       wch: Math.max(key.length, ...rows.map(r => String(r[key] || '').length)) + 2
     }));
@@ -398,16 +405,29 @@ export default function RosterPage() {
             <p>Click "Generate Auto Roster" to run the scheduling engine for this period.</p>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', padding: 20 }}>
-            <table className="data-table" style={{ margin: 0, minWidth: '100%' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 350px)', padding: '0 20px 20px 20px' }}>
+            <table className="data-table" style={{ margin: 0, minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
-                <tr>
-                  <th style={{ width: 250, position: 'sticky', left: 0, background: 'var(--bg-secondary)', zIndex: 1, borderRight: '2px solid var(--border-color)' }}>Staff Member</th>
+                <tr style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                  <th style={{ 
+                    width: 250, 
+                    position: 'sticky', 
+                    left: 0, 
+                    top: 0,
+                    background: 'var(--bg-secondary)', 
+                    zIndex: 11, 
+                    borderRight: '2px solid var(--border-color)',
+                    borderBottom: '2px solid var(--border-color)'
+                  }}>Staff Member</th>
                   {dates.map(date => (
                     <th key={date} style={{
                       textAlign: 'center',
                       minWidth: 80,
-                      background: isWeekend(date) ? 'var(--accent-warning-subtle)' : undefined,
+                      position: 'sticky',
+                      top: 0,
+                      background: isWeekend(date) ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                      zIndex: 9,
+                      borderBottom: '2px solid var(--border-color)'
                     }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: 500, color: isWeekend(date) ? 'var(--accent-warning)' : 'var(--text-tertiary)' }}>{getDayName(date)}</div>
                       <div>{date.split('-')[2]}</div>
