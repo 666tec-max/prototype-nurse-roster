@@ -48,6 +48,9 @@ export default function RosterPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [validationWarnings, setValidationWarnings] = useState([]);
+  const [solveTimeLimit, setSolveTimeLimit] = useState(30);
+  const [solverResult, setSolverResult] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
     if (user) loadInitialData();
@@ -189,25 +192,39 @@ export default function RosterPage() {
       await supabase.from('roster_metadata').delete().eq('id', metadata.id);
     }
 
+    // Start elapsed timer
+    setElapsedSeconds(0);
+    const timerInterval = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+
     try {
       const { data, error } = await supabase.functions.invoke('generate-roster', {
         body: {
           department_id: filterDept,
           start_date: startDate,
           end_date: endDate,
-          user_id: user.userId
+          user_id: user.userId,
+          time_limit_seconds: solveTimeLimit
         }
       });
 
       if (error) throw error;
 
-      alert(`Successfully generated roster with ${data.count} shift assignments.`);
+      setSolverResult({
+        status: data.solver_status || 'UNKNOWN',
+        solve_time_ms: data.solve_time_ms || 0,
+        score: data.score,
+        count: data.count,
+      });
       setValidationWarnings([]);
       loadRoster();
     } catch (err) {
       console.error(err);
-      alert('Failed to generate roster: ' + err.message);
+      alert('Failed to generate roster: ' + (err.message || err));
     } finally {
+      clearInterval(timerInterval);
+      setElapsedSeconds(0);
       setGenerating(false);
     }
   };
@@ -343,19 +360,37 @@ export default function RosterPage() {
           </div>
         </div>
         <div style={{ padding: '0 20px 20px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button className="btn btn-sm btn-ghost" onClick={() => handleShortcut('2weeks')}>Next 2 weeks</button>
             <button className="btn btn-sm btn-ghost" onClick={() => handleShortcut('1month')}>Next month</button>
             <button className="btn btn-sm btn-ghost" onClick={() => handleShortcut('2months')}>Next next month</button>
+            <span style={{ width: 1, height: 24, background: 'var(--border-color)', margin: '0 4px' }} />
+            <select
+              className="form-input"
+              value={solveTimeLimit}
+              onChange={e => setSolveTimeLimit(parseInt(e.target.value))}
+              style={{ width: 'auto', fontSize: '0.8rem', padding: '4px 8px' }}
+            >
+              <option value={10}>Quick (10s)</option>
+              <option value={30}>Standard (30s)</option>
+              <option value={60}>Thorough (60s)</option>
+            </select>
           </div>
-          <button
-            className="btn btn-primary"
-            onClick={generateRoster}
-            disabled={generating || !filterDept}
-          >
-            {generating ? <Loader2 className="spin" size={18} /> : <Wand2 size={18} />}
-            {generating ? 'Engine Running...' : 'Generate Auto Roster'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {generating && (
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                ⏱ {elapsedSeconds}s / ~{solveTimeLimit}s
+              </span>
+            )}
+            <button
+              className="btn btn-primary"
+              onClick={generateRoster}
+              disabled={generating || !filterDept}
+            >
+              {generating ? <Loader2 className="spin" size={18} /> : <Wand2 size={18} />}
+              {generating ? 'OR-Tools Solving...' : 'Generate Auto Roster'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -383,6 +418,29 @@ export default function RosterPage() {
       )}
 
       {/* Schedule Viewer */}
+      {/* Solver Result Badge */}
+      {solverResult && (
+        <div style={{
+          marginBottom: 16,
+          padding: '12px 16px',
+          borderRadius: 'var(--radius-md)',
+          background: solverResult.status === 'OPTIMAL' ? 'var(--accent-success-subtle)' : 'var(--accent-info-subtle)',
+          color: solverResult.status === 'OPTIMAL' ? 'var(--accent-success)' : 'var(--accent-info)',
+          fontSize: '0.85rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <span>
+            <strong>Solver: {solverResult.status}</strong> — {solverResult.count} assignments
+            {solverResult.score && solverResult.score !== 'None' ? ` • Score: ${parseFloat(solverResult.score).toFixed(0)}` : ''}
+          </span>
+          <span style={{ opacity: 0.7 }}>
+            Solved in {(solverResult.solve_time_ms / 1000).toFixed(1)}s
+          </span>
+        </div>
+      )}
+
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', marginBottom: 20 }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3>Schedule Viewer</h3>
