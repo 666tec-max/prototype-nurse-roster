@@ -9,8 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Cloud Run expects PORT env var (default 8080)
-ENV PORT=8080
+# Hugging Face expects port 7860
+ENV PORT=7860
 
 # Run FastAPI with uvicorn
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 7860"]
