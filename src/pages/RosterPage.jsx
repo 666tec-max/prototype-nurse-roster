@@ -418,29 +418,6 @@ export default function RosterPage() {
       )}
 
       {/* Schedule Viewer */}
-      {/* Solver Result Badge */}
-      {solverResult && (
-        <div style={{
-          marginBottom: 16,
-          padding: '12px 16px',
-          borderRadius: 'var(--radius-md)',
-          background: solverResult.status === 'OPTIMAL' ? 'var(--accent-success-subtle)' : 'var(--accent-info-subtle)',
-          color: solverResult.status === 'OPTIMAL' ? 'var(--accent-success)' : 'var(--accent-info)',
-          fontSize: '0.85rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <span>
-            <strong>Solver: {solverResult.status}</strong> — {solverResult.count} assignments
-            {solverResult.score && solverResult.score !== 'None' ? ` • Score: ${parseFloat(solverResult.score).toFixed(0)}` : ''}
-          </span>
-          <span style={{ opacity: 0.7 }}>
-            Solved in {(solverResult.solve_time_ms / 1000).toFixed(1)}s
-          </span>
-        </div>
-      )}
-
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', marginBottom: 20 }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3>Schedule Viewer</h3>
