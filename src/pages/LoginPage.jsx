@@ -114,21 +114,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{
-          marginTop: 24,
-          padding: '14px',
-          background: 'var(--accent-primary-subtle)',
-          borderRadius: 'var(--radius-md)',
-          fontSize: '0.75rem',
-          color: 'var(--text-secondary)',
-          lineHeight: 1.6,
-        }}>
-          <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--accent-primary)' }}>
-            Demo Account
-          </div>
-          <div><strong>User ID:</strong> Demo</div>
-          <div><strong>Password:</strong> Password123</div>
-        </div>
       </div>
     </div>
   );
