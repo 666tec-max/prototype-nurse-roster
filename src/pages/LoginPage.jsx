@@ -114,6 +114,29 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <div style={{
+          marginTop: 20,
+          padding: '12px 16px',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(99, 102, 241, 0.1)',
+          border: '1px solid rgba(99, 102, 241, 0.25)',
+          fontSize: '0.82rem',
+          color: 'var(--text-secondary)',
+          lineHeight: 1.6,
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--accent-primary)', marginBottom: 6 }}>
+            🔑 Demo Account
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>User ID</span>
+            <code style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>Demo</code>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+            <span>Password</span>
+            <code style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>Password123</code>
+          </div>
+        </div>
+
       </div>
     </div>
   );
