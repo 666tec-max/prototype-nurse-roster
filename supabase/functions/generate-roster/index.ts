@@ -170,11 +170,12 @@ serve(async (req) => {
 
     if (solverResult.status === 'INFEASIBLE' || solverResult.status === 'MODEL_INVALID') {
       return new Response(JSON.stringify({
+        success: false,
         error: solverResult.message || 'Constraints are too tight — no valid roster is possible',
         solver_status: solverResult.status,
         solve_time_ms: solverResult.solve_time_ms,
       }), {
-        status: 422,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }

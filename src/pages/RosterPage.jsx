@@ -211,6 +211,14 @@ export default function RosterPage() {
 
       if (error) throw error;
 
+      // Handle solver INFEASIBLE / MODEL_INVALID (returned as 200 with success: false)
+      if (data && data.success === false) {
+        const solverMsg = data.error || 'The solver could not find a valid roster.';
+        setValidationWarnings([`Solver: ${solverMsg} (${data.solver_status || 'INFEASIBLE'}, solved in ${data.solve_time_ms || 0}ms)`]);
+        setSolverResult(null);
+        return;
+      }
+
       setSolverResult({
         status: data.solver_status || 'UNKNOWN',
         solve_time_ms: data.solve_time_ms || 0,
